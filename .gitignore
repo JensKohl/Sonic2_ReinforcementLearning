@@ -1,0 +1,27 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Ignore the AI's "Brain" files and logs
+logs_parallel/
+logs_stacking/
+logs/
+*.zip
+*.csv
+
+# Ignore video recordings
+videos/
+
+# ignore roms
+ROMS/
+
+# System files
+__pycache__/
+.env

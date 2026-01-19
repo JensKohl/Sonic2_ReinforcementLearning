@@ -1,0 +1,197 @@
+import gymnasium as gym
+import numpy as np
+import cv2
+
+class RetroCompatibility(gym.Wrapper):
+    """
+    Acts like a translator between the old Retro emulator and the new Gym.
+    It takes the 4 values returned by Retro and turns them into the 5 values 
+    expected by modern Reinforcement Learning libraries.
+    """
+    def __init__(self, env):
+        super().__init__(env)
+        
+    def step(self, action):
+        obs, reward, done, info = self.env.step(action)
+        terminated = done # Terminated means the game ended (Level won or Sonic died)
+        truncated = False # Truncated means the time ran out (not used here)
+        return obs, reward, terminated, truncated, info
+    
+    def reset(self, **kwargs):
+        # New Gym sends 'seed' and 'options', but old Retro doesn't know what those are.
+        # We throw them away so the game doesn't crash.
+        kwargs.pop('seed', None)
+        kwargs.pop('options', None)
+        obs = self.env.reset(**kwargs)
+        if isinstance(obs, tuple): return obs
+        return obs, {}
+
+class SonicDiscretizer(gym.ActionWrapper):
+    """
+    Reduces the MultiBinary(12) Genesis controller to a few useful Discrete actions.
+    This simplifies the search space for the RL agent significantly.
+    """
+    def __init__(self, env):
+        super().__init__(env)
+        buttons = ["B", "A", "MODE", "START", "UP", "DOWN", "LEFT", "RIGHT", "C", "Y", "X", "Z"]
+        actions = [
+            ['LEFT'], ['RIGHT'], ['LEFT', 'DOWN'], ['RIGHT', 'DOWN'], 
+            ['DOWN'], ['DOWN', 'B'], ['B']
+        ]
+        self._actions = []
+        for action in actions:
+            arr = np.array([False] * 12)
+            for button in action:
+                arr[buttons.index(button)] = True
+            self._actions.append(arr)
+        self.action_space = gym.spaces.Discrete(len(self._actions))
+
+    def action(self, action):
+        return self._actions[action].copy()
+
+class ResizeObservation(gym.ObservationWrapper):
+    """
+    Resizes the 320x224 Genesis output to a standard 84x84 square.
+    This makes the input 7x smaller, which makes the AI 7x faster!
+    """
+    def __init__(self, env, shape=84):
+        super().__init__(env)
+        self.shape = (shape, shape) if isinstance(shape, int) else tuple(shape)
+        # We tell the AI that the screen size has changed to 84x84.
+        obs_shape = self.shape + self.observation_space.shape[2:]
+        self.observation_space = gym.spaces.Box(low=0, high=255, shape=obs_shape, dtype=np.uint8)
+
+    def observation(self, observation):
+        # We use 'INTER_NEAREST' because it's the fastest way to resize images.
+        return cv2.resize(observation, self.shape, interpolation=cv2.INTER_NEAREST)
+
+class TransposeObservation(gym.ObservationWrapper):
+    """Converts (H, W, C) to (C, H, W) to match PyTorch expectations."""
+    def __init__(self, env):
+        super().__init__(env)
+        obs_shape = self.observation_space.shape
+        self.shape = (obs_shape[2], obs_shape[0], obs_shape[1])
+        self.observation_space = gym.spaces.Box(low=0, high=255, shape=self.shape, dtype=np.uint8)
+
+    def observation(self, observation):
+        offset = (2, 0, 1)
+        return np.transpose(observation, offset)
+
+class PyTorchFrameStack(gym.Wrapper):
+    """
+    Stacks k consecutive frames (usually 4) in one big pile.
+    If the AI only sees 1 frame, it doesn't know if Sonic is moving.
+    By seeing 4 frames at once, it can see Sonic's velocity and acceleration.
+    """
+    def __init__(self, env, k):
+        super().__init__(env)
+        self.k = k
+        self.frames = []
+        shp = env.observation_space.shape
+        # New shape will be (k * Channels, Height, Width)
+        self.observation_space = gym.spaces.Box(
+            low=0, high=255, shape=(shp[0] * k, shp[1], shp[2]), dtype=env.observation_space.dtype
+        )
+
+    def reset(self, **kwargs):
+        # When the game restarts, we fill the stack with the first frame 4 times.
+        ob, info = self.env.reset(**kwargs)
+        self.frames = [ob] * self.k
+        return self._get_ob(), info
+
+    def step(self, action):
+        # Every step, we add the new frame and throw away the oldest one.
+        ob, reward, terminated, truncated, info = self.env.step(action)
+        self.frames.append(ob)
+        self.frames.pop(0)
+        return self._get_ob(), reward, terminated, truncated, info
+
+    def _get_ob(self):
+        # Glue the 4 frames together into one big observation.
+        return np.concatenate(self.frames, axis=0)
+
+class InfoRenderWrapper(gym.Wrapper):
+    """
+    Periodic frame capture for visualization.
+    Only captures every 'frequency' steps to minimize IPC bottleneck.
+    """
+    def __init__(self, env, frequency=16):
+        super().__init__(env)
+        self.frequency = frequency
+        self.step_count = 0
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        self.step_count += 1
+        info["render_frame"] = self.env.unwrapped.get_screen() if self.step_count % self.frequency == 0 else None
+        return obs, reward, terminated, truncated, info
+
+    def reset(self, **kwargs):
+        res = self.env.reset(**kwargs)
+        self.step_count = 0
+        if isinstance(res, tuple):
+            obs, info = res
+            info["render_frame"] = self.env.unwrapped.get_screen()
+            return obs, info
+        return res
+
+class SonicRewardV0(gym.Wrapper):
+    """
+    Custom Reward Shaping:
+    Encourages speed-running while penalizing death.
+    """
+    def __init__(self, env):
+        super().__init__(env)
+        self.prev_lives = 3
+        self.max_x = 0
+
+    def reset(self, **kwargs):
+        obs, info = self.env.reset(**kwargs)
+        self.prev_lives = info.get('lives', 3)
+        self.max_x = info.get('x', 0)
+        return obs, info
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        
+        curr_x = info.get('x', 0)
+        progress_reward = max(0, curr_x - self.max_x)
+        self.max_x = max(self.max_x, curr_x)
+        
+        # Time pressure
+        time_penalty = -0.005
+        
+        # Survival
+        curr_lives = info.get('lives', 3)
+        life_penalty = -50.0 if curr_lives < self.prev_lives else 0.0
+        self.prev_lives = curr_lives
+        
+        # Win condition
+        win_bonus = 250.0 if curr_x > 10000 else 0.0
+        if win_bonus > 0: terminated = True
+            
+        custom_reward = progress_reward + time_penalty + life_penalty + win_bonus
+        return obs, float(custom_reward), terminated, truncated, info
+
+class TimeLimitWrapper(gym.Wrapper):
+    """
+    Stops the episode after a fixed number of steps.
+    This encourages the agent to find the finish line faster.
+    """
+    def __init__(self, env, max_steps=10800): # 10,800 steps = 3 minutes at 60 FPS
+        super().__init__(env)
+        self.max_steps = max_steps
+        self.current_step = 0
+
+    def step(self, action):
+        self.current_step += 1
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        
+        if self.current_step >= self.max_steps:
+            truncated = True
+            
+        return obs, reward, terminated, truncated, info
+
+    def reset(self, **kwargs):
+        self.current_step = 0
+        return self.env.reset(**kwargs)

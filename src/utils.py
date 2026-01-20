@@ -14,7 +14,8 @@ from src.env_wrappers import (
     TransposeObservation, 
     InfoRenderWrapper, 
     SonicRewardV0,
-    TimeLimitWrapper
+    TimeLimitWrapper,
+    StagnationWrapper
 )
 
 def make_env(game, state, stack_frames=4, render=False):
@@ -68,7 +69,10 @@ def make_env(game, state, stack_frames=4, render=False):
         # 6. Time Limit: Force restart after 3 minutes (10,800 frames)
         env = TimeLimitWrapper(env, max_steps=10800)
         
-        # 7. Frame Stacking: Let the agent see 'time' by stacking 4 consecutive frames
+        # 7. Stagnation Check: Restart if Sonic is stuck for 30 seconds (1800 frames)
+        env = StagnationWrapper(env, max_stagnant_steps=1800)
+        
+        # 8. Frame Stacking: Let the agent see 'time' by stacking 4 consecutive frames
         env = PyTorchFrameStack(env, stack_frames)
         
         return env

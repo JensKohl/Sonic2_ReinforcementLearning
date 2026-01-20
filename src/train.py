@@ -111,7 +111,7 @@ def train():
     gym_id = "SonicTheHedgehog2-Genesis"
     state = "EmeraldHillZone.Act1"
     
-    total_timesteps = 10_000_000
+    total_timesteps = 15_000_000
     learning_rate = 2.5e-4
     num_envs = 8 # Optimal for RTX 2060
     num_steps = 512 # Balanced: 512 steps is large enough for efficiency but fast enough for frequent updates

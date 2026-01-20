@@ -1,6 +1,22 @@
+import os
+import sys
 import gymnasium as gym
-import torch
+
+# --- CRITICAL RETRO COMPATIBILITY BLOCK ---
+# We must alias gym to gymnasium before ANY other imports that use retro
+sys.modules["gym"] = gym
+
 import numpy as np
+import gymnasium.utils.seeding as seeding
+def hash_seed(seed=None, max_bytes=8):
+    if seed is None:
+        seed = np.random.randint(0, 2**31 - 1)
+    return int(seed)
+seeding.hash_seed = hash_seed
+sys.modules["gym.utils.seeding"] = seeding
+# ------------------------------------------
+
+import torch
 import time
 import argparse
 import cv2

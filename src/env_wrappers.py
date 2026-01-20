@@ -35,8 +35,9 @@ class SonicDiscretizer(gym.ActionWrapper):
         super().__init__(env)
         buttons = ["B", "A", "MODE", "START", "UP", "DOWN", "LEFT", "RIGHT", "C", "Y", "X", "Z"]
         actions = [
-            ['LEFT'], ['RIGHT'], ['LEFT', 'DOWN'], ['RIGHT', 'DOWN'], 
-            ['DOWN'], ['DOWN', 'B'], ['B']
+            ['LEFT'], ['RIGHT'], ['LEFT', 'B'], ['RIGHT', 'B'], 
+            ['LEFT', 'DOWN'], ['RIGHT', 'DOWN'], ['DOWN'], ['DOWN', 'B'], 
+            ['B'], ['DOWN', 'A'] # Added A as alternative Spin Dash button
         ]
         self._actions = []
         for action in actions:
@@ -149,6 +150,7 @@ class SonicRewardV0(gym.Wrapper):
         obs, info = self.env.reset(**kwargs)
         self.prev_lives = info.get('lives', 3)
         self.max_x = info.get('x', 0)
+        self.prev_x = self.max_x
         return obs, info
 
     def step(self, action):
@@ -170,7 +172,14 @@ class SonicRewardV0(gym.Wrapper):
         win_bonus = 250.0 if curr_x > 10000 else 0.0
         if win_bonus > 0: terminated = True
             
-        custom_reward = progress_reward + time_penalty + life_penalty + win_bonus
+        # Momentum Reward (SonicRewardV2): 
+        # Rewards speed in ANY direction, but favors forward progress.
+        # This keeps the agent "excited" even when backtracking for a loop.
+        velocity = curr_x - self.prev_x
+        momentum_reward = abs(velocity) * 0.05
+        self.prev_x = curr_x
+            
+        custom_reward = progress_reward + momentum_reward + time_penalty + life_penalty + win_bonus
         return obs, float(custom_reward), terminated, truncated, info
 
 class TimeLimitWrapper(gym.Wrapper):
@@ -195,3 +204,46 @@ class TimeLimitWrapper(gym.Wrapper):
     def reset(self, **kwargs):
         self.current_step = 0
         return self.env.reset(**kwargs)
+
+class StagnationWrapper(gym.Wrapper):
+    """
+    Truncates the episode if the agent's x-coordinate doesn't increase for a while.
+    This prevents the agent from getting stuck behind obstacles for too long.
+    """
+    def __init__(self, env, max_stagnant_steps=1800): # 30 seconds at 60 FPS
+        super().__init__(env)
+        self.max_stagnant_steps = max_stagnant_steps
+        self.current_stagnant_steps = 0
+        self.last_x = 0
+        self.total_movement_in_window = 0
+        self.max_x = 0
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        
+        curr_x = info.get('x', 0)
+        
+        # We track "Total Movement" (distance traveled)
+        # This allows Sonic to run back and forth without stalling the timer.
+        dist_moved = abs(curr_x - self.last_x)
+        self.total_movement_in_window += dist_moved
+        self.last_x = curr_x
+        self.current_stagnant_steps += 1
+            
+        if self.current_stagnant_steps >= self.max_stagnant_steps:
+            # If total distance moved in 30 seconds is less than 50 pixels, he's stuck.
+            if self.total_movement_in_window < 50:
+                truncated = True
+            else:
+                # Reset the window but keep going
+                self.current_stagnant_steps = 0
+                self.total_movement_in_window = 0
+            
+        return obs, reward, terminated, truncated, info
+
+    def reset(self, **kwargs):
+        self.current_stagnant_steps = 0
+        self.total_movement_in_window = 0
+        obs, info = self.env.reset(**kwargs)
+        self.last_x = info.get('x', 0)
+        return obs, info

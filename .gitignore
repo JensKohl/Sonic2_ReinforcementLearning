@@ -19,6 +19,9 @@ logs/
 # Ignore video recordings
 videos/
 
+# Ignore models
+models/
+
 # ignore roms
 ROMS/
 

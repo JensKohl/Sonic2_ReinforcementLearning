@@ -11,6 +11,8 @@ from src.env_wrappers import (
     ResizeObservation, 
     PyTorchFrameStack, 
     RetroCompatibility, 
+    TransposeObservation, 
+    InfoRenderWrapper, 
     SonicRewardV0,
     TimeLimitWrapper,
     StagnationWrapper,
@@ -47,16 +49,17 @@ def make_env(game, state, stack_frames=4, render=False):
         # Initialize base Retro environment
         env = retro.make(game=game, state=state)
         
-        # 0. Frame Skipping (CRITICAL for Momentum):
+        # 1. Compatibility (MUST BE FIRST): Sync return values with Gymnasium standards
+        # This strips 'seed' and 'options' before they hit the raw retro env.
+        env = RetroCompatibility(env)
+
+        # 2. Frame Skipping (CRITICAL for Momentum):
         # We repeat each action for 4 frames. 
         # This makes the AI feel like it's running at 15 FPS instead of 60 FPS,
         # which helps build momentum and prevents "jittery" jumping.
         env = FrameSkip(env, skip=4)
         
-        # 1. Compatibility: Sync return values with Gymnasium standards
-        env = RetroCompatibility(env)
-        
-        # 2. Reward Shaping: Define what the agent should care about (Speed & Survival)
+        # 3. Reward Shaping: Define what the agent should care about (Speed & Survival)
         env = SonicRewardV0(env)
         
         # 3. Visualization: (Optional) Pass frames back to main process for rendering

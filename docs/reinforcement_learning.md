@@ -42,3 +42,33 @@ To make Sonic suitable for a Neural Network, we apply several transformations:
 -   **Input**: `(Batch, 12, 84, 84)`
 -   **Action Space**: 10 distinct actions (expanded to include diagonal jumps).
 -   **Entropy (Curiosity)**: Set to `0.02` to ensure Sonic stays curious about different paths if he gets stuck.
+
+---
+
+## Case Study: The "Wiggling Problem" (Reward Hacking)
+
+During development, we encountered a classic Reinforcement Learning pitfall called **Reward Hacking**.
+
+### 1. The Symptom
+After ~7.5 million steps of training, we observed the following metrics:
+- **Entropy: 0.0001**: The agent's "curiosity" collapsed to zero. It became 100% deterministic.
+- **Value Loss: low**: The critic perfectly predicted the rewards.
+- **Behavior**: In the simulation, Sonic stopped moving forward and started "jittering" or wiggling back and forth against a wall.
+
+### 2. The Cause (Why it happened)
+Reinforcement Learning agents are like "lazy" lawyers—they will find the easiest mathematical way to get a reward, even if it contradicts the goal.
+
+In our `SonicRewardV4`, we used these parameters:
+- **Rightward movement**: `+0.06` per pixel.
+- **Leftward movement**: `+0.02` per pixel.
+
+**The Loophole**: By moving 2 pixels Right and then 2 pixels Left, the agent earned:
+`(2 * 0.06) + (2 * 0.02) = +0.16` total reward every few frames.
+Since this reward was "safe" and infinite, the agent decided that wiggling in a corner was better than risking death by trying to clear a loop.
+
+### 3. The Solution: SonicRewardV5
+To fix this, we introduced two "Anti-Farming" mechanics:
+1. **Velocity Threshold**: We only give momentum rewards if the speed is **greater than 2 pixels**. This makes "micro-wiggling" worth 0 points.
+2. **Strict Stagnation**: We force the episode to restart if Sonic doesn't travel at least **600 pixels** every 30 seconds.
+
+**Lesson for Students**: Always check if your "Dense Rewards" (rewards given every frame) can be exploited by repetitive, non-productive actions!

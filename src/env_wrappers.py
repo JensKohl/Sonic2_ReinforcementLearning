@@ -192,19 +192,28 @@ class SonicRewardV0(gym.Wrapper):
         win_bonus = 250.0 if curr_x > 10000 else 0.0
         if win_bonus > 0: terminated = True
             
-        # Momentum Reward (SonicRewardV4 - Turbo): 
+        # Momentum Reward (SonicRewardV5 - Anti-Farming): 
         # Rewards speed in ANY direction, but favors forward progress (3x Bias).
-        # ADDED: High Speed Bonus (2x) if moving faster than 4 pixels/frame.
+        # We only reward speed > 2 to prevent "wiggling" rewards.
+        # Plus, a 2x bonus for extreme speed (Turbo) to beat loops.
         velocity = curr_x - self.prev_x
         speed = abs(velocity)
         
-        # High speed multiplier (Turbo)
-        multiplier = 2.0 if speed > 4 else 1.0
+        # 1. Start with zero momentum reward
+        momentum_reward = 0.0
         
-        if velocity > 0:
-            momentum_reward = velocity * 0.06 * multiplier
-        else:
-            momentum_reward = speed * 0.02 * multiplier
+        # 2. Only reward meaningful movement (Anti-Farming Threshold)
+        if speed > 2.0:
+            # High speed multiplier (Turbo)
+            multiplier = 2.0 if speed > 4.0 else 1.0
+            
+            if velocity > 0:
+                # Goal Reward (Right)
+                momentum_reward = velocity * 0.06 * multiplier
+            else:
+                # Backtracking Reward (Left)
+                momentum_reward = speed * 0.02 * multiplier
+                
         self.prev_x = curr_x
             
         custom_reward = progress_reward + momentum_reward + time_penalty + life_penalty + win_bonus

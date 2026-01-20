@@ -72,3 +72,23 @@ To fix this, we introduced two "Anti-Farming" mechanics:
 2. **Strict Stagnation**: We force the episode to restart if Sonic doesn't travel at least **600 pixels** every 30 seconds.
 
 **Lesson for Students**: Always check if your "Dense Rewards" (rewards given every frame) can be exploited by repetitive, non-productive actions!
+
+---
+
+## Case Study: Reward Scaling (Gradient Stability)
+
+During the final run, we observed **Entropy Collapse**. The agent's curiosity dropped to zero (0.0000) almost immediately.
+
+### 1. The Symptom
+The Metrics showed:
+- **Entropy: 0.0000** (Update 20)
+- **Value Loss: > 2000**
+
+### 2. The Cause (Reward Magnitude)
+Our cumulative rewards (Progress + Momentum) were reaching values of **+10 per step**. In Deep RL, these huge numbers cause "Gradient Explosion". The neural network is so shocked by the large rewards that it immediately crushes the exploration logic and "locks in" to whatever action it was doing.
+
+### 3. The Fix: 0.01 Scaling
+We applied a global multiplier of **0.01** to all rewards.
+- Instead of a +10 reward, the agent Sees **+0.1**.
+- This keeps the "Value Function" in a small, stable range.
+- **Result**: The agent remains "curious" for millions of steps, allowing it to actually learn the level instead of panic-committing to one move.

@@ -217,7 +217,7 @@ class SonicRewardV0(gym.Wrapper):
         self.prev_x = curr_x
             
         custom_reward = progress_reward + momentum_reward + time_penalty + life_penalty + win_bonus
-        return obs, float(custom_reward), terminated, truncated, info
+        return obs, float(custom_reward * 0.01), terminated, truncated, info
 
 class TimeLimitWrapper(gym.Wrapper):
     """

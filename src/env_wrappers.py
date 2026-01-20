@@ -172,11 +172,14 @@ class SonicRewardV0(gym.Wrapper):
         win_bonus = 250.0 if curr_x > 10000 else 0.0
         if win_bonus > 0: terminated = True
             
-        # Momentum Reward (SonicRewardV2): 
-        # Rewards speed in ANY direction, but favors forward progress.
+        # Momentum Reward (SonicRewardV3): 
+        # Rewards speed in ANY direction, but favors forward progress (3x Bias).
         # This keeps the agent "excited" even when backtracking for a loop.
         velocity = curr_x - self.prev_x
-        momentum_reward = abs(velocity) * 0.05
+        if velocity > 0:
+            momentum_reward = velocity * 0.06
+        else:
+            momentum_reward = abs(velocity) * 0.02
         self.prev_x = curr_x
             
         custom_reward = progress_reward + momentum_reward + time_penalty + life_penalty + win_bonus

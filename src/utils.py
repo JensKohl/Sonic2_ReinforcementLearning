@@ -11,11 +11,10 @@ from src.env_wrappers import (
     ResizeObservation, 
     PyTorchFrameStack, 
     RetroCompatibility, 
-    TransposeObservation, 
-    InfoRenderWrapper, 
     SonicRewardV0,
     TimeLimitWrapper,
-    StagnationWrapper
+    StagnationWrapper,
+    FrameSkip
 )
 
 def make_env(game, state, stack_frames=4, render=False):
@@ -48,7 +47,12 @@ def make_env(game, state, stack_frames=4, render=False):
         # Initialize base Retro environment
         env = retro.make(game=game, state=state)
         
-        # Apply Wrappers in order:
+        # 0. Frame Skipping (CRITICAL for Momentum):
+        # We repeat each action for 4 frames. 
+        # This makes the AI feel like it's running at 15 FPS instead of 60 FPS,
+        # which helps build momentum and prevents "jittery" jumping.
+        env = FrameSkip(env, skip=4)
+        
         # 1. Compatibility: Sync return values with Gymnasium standards
         env = RetroCompatibility(env)
         
@@ -66,11 +70,11 @@ def make_env(game, state, stack_frames=4, render=False):
         env = ResizeObservation(env, 84)
         env = TransposeObservation(env)
         
-        # 6. Time Limit: Force restart after 3 minutes (10,800 frames)
-        env = TimeLimitWrapper(env, max_steps=10800)
+        # 6. Time Limit: Force restart after 3 minutes (2700 "AI steps" at 4-frame skip)
+        env = TimeLimitWrapper(env, max_steps=2700)
         
-        # 7. Stagnation Check: Restart if Sonic is stuck for 30 seconds (1800 frames)
-        env = StagnationWrapper(env, max_stagnant_steps=1800)
+        # 7. Stagnation Check: Restart if Sonic is stuck for 30 seconds (450 "AI steps")
+        env = StagnationWrapper(env, max_stagnant_steps=450)
         
         # 8. Frame Stacking: Let the agent see 'time' by stacking 4 consecutive frames
         env = PyTorchFrameStack(env, stack_frames)

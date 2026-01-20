@@ -2,6 +2,26 @@ import gymnasium as gym
 import numpy as np
 import cv2
 
+class FrameSkip(gym.Wrapper):
+    """
+    Repeats the same action for 'skip' frames.
+    This is standard in Atari/Retro RL because it helps the agent 
+    build momentum and reduces the "jittery" behavior of picking 
+    a new action every 1/60th of a second.
+    """
+    def __init__(self, env, skip=4):
+        super().__init__(env)
+        self.skip = skip
+
+    def step(self, action):
+        total_reward = 0.0
+        for _ in range(self.skip):
+            obs, reward, terminated, truncated, info = self.env.step(action)
+            total_reward += reward
+            if terminated or truncated:
+                break
+        return obs, total_reward, terminated, truncated, info
+
 class RetroCompatibility(gym.Wrapper):
     """
     Acts like a translator between the old Retro emulator and the new Gym.
@@ -172,14 +192,19 @@ class SonicRewardV0(gym.Wrapper):
         win_bonus = 250.0 if curr_x > 10000 else 0.0
         if win_bonus > 0: terminated = True
             
-        # Momentum Reward (SonicRewardV3): 
+        # Momentum Reward (SonicRewardV4 - Turbo): 
         # Rewards speed in ANY direction, but favors forward progress (3x Bias).
-        # This keeps the agent "excited" even when backtracking for a loop.
+        # ADDED: High Speed Bonus (2x) if moving faster than 4 pixels/frame.
         velocity = curr_x - self.prev_x
+        speed = abs(velocity)
+        
+        # High speed multiplier (Turbo)
+        multiplier = 2.0 if speed > 4 else 1.0
+        
         if velocity > 0:
-            momentum_reward = velocity * 0.06
+            momentum_reward = velocity * 0.06 * multiplier
         else:
-            momentum_reward = abs(velocity) * 0.02
+            momentum_reward = speed * 0.02 * multiplier
         self.prev_x = curr_x
             
         custom_reward = progress_reward + momentum_reward + time_penalty + life_penalty + win_bonus
@@ -234,8 +259,9 @@ class StagnationWrapper(gym.Wrapper):
         self.current_stagnant_steps += 1
             
         if self.current_stagnant_steps >= self.max_stagnant_steps:
-            # If total distance moved in 30 seconds is less than 50 pixels, he's stuck.
-            if self.total_movement_in_window < 50:
+            # If total distance moved in 30 seconds is less than 600 pixels (Turbo Update), he's stuck.
+            # 600 pixels / 1800 steps = 0.33 pixels/step average (prevents wiggling)
+            if self.total_movement_in_window < 600:
                 truncated = True
             else:
                 # Reset the window but keep going

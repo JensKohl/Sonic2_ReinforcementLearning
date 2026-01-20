@@ -31,14 +31,14 @@ RL is slow. To speed it up, we run multiple copies of Sonic 2 at the same time (
 
 #### Environment Wrappers (`src/env_wrappers.py`)
 To make Sonic suitable for a Neural Network, we apply several transformations:
-1.  **SonicDiscretizer**: The Genesis controller has 12 buttons. We simplify this to 7 distinct actions (Left, Right, Jump, etc.) to make learning easier.
-2.  **ResizeObservation**: Original game is 320x224. We resize to 84x84 squares to reduce computation.
-3.  **TransposeObservation**: PyTorch expects images in `(Channels, Height, Width)` format, but Gym provides `(Height, Width, Channels)`. This wrapper fixes that.
-4.  **FrameStack**: We stack 4 frames. With RGB color (3 channels), the input to the CNN becomes 12 channels (4 frames x 3 channels).
+1.  **FrameSkip (4 Frames)**: **Standard RL best practice.** At 60 FPS, the agent changes its "mind" too frequently to build momentum. By repeating an action for 4 frames, we force "commitment," helping Sonic actually build the speed needed for hills and loops.
+2.  **SonicDiscretizer**: Simplifies 12 buttons into a few logical game commands. We added "Jump Forward" and "Spin Dash" macros because complex physics maneuvers are hard for an AI to Discover by accident.
+3.  **SonicRewardV3 (Biased Momentum)**: Standard RL rewards distance (Progress). However, Sonic needs to backtrack to build speed for loops. We reward **Absolute Velocity** (speed in any direction) but give **3x more reward** for moving Right. This encourages goal-orientation while literally "paying" the agent to build momentum.
+4.  **Stagnation Check**: Prevents "Reward Farming." We detect if the agent is just "wiggling" in place to collect velocity points and restart the level if they don't cover 600px every 30 seconds.
+5.  **Resize & Transpose**: Standard image processing to make the data 7x smaller and compatible with PyTorch.
+6.  **FrameStack**: Adds "Temporal Awareness," allowing the CNN to see velocity.
 
 #### Neural Network (`src/cnn.py`, `src/agent.py`)
 -   **Input**: `(Batch, 12, 84, 84)`
--   **Structure**: 3 Convolutional Layers -> Flatten -> 512 Neurons -> Actor/Critic Heads.
--   **Output**: 
-    -   Actor: 7 probabilities (one for each action).
-    -   Critic: 1 value (how good is the current state).
+-   **Action Space**: 10 distinct actions (expanded to include diagonal jumps).
+-   **Entropy (Curiosity)**: Set to `0.02` to ensure Sonic stays curious about different paths if he gets stuck.

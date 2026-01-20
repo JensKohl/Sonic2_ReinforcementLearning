@@ -78,7 +78,7 @@ class PPOAlgo:
     Proximal Policy Optimization (PPO) Clipper Objective.
     This class handles the optimization of the Actor-Critic network.
     """
-    def __init__(self, agent, optimizer, device, ent_coef=0.01, vf_coef=0.5, clip_coef=0.2, max_grad_norm=0.5):
+    def __init__(self, agent, optimizer, device, ent_coef=0.02, vf_coef=0.5, clip_coef=0.2, max_grad_norm=0.5):
         self.agent = agent
         self.optimizer = optimizer
         self.device = device

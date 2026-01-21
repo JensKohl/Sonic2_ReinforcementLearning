@@ -192,31 +192,30 @@ class SonicRewardV0(gym.Wrapper):
         win_bonus = 250.0 if curr_x > 10000 else 0.0
         if win_bonus > 0: terminated = True
             
-        # Momentum Reward (SonicRewardV5 - Anti-Farming): 
-        # Rewards speed in ANY direction, but favors forward progress (3x Bias).
-        # We only reward speed > 2 to prevent "wiggling" rewards.
-        # Plus, a 2x bonus for extreme speed (Turbo) to beat loops.
+        # Momentum Reward (SonicRewardV6 - Hill Mastery): 
+        # 1. REMOVED Bias: Rewards speed in ANY direction equally.
+        # This makes running back for momentum "free" for the agent.
+        # 2. Jump Penalty: Discourages "jitter-jumping" at hills.
         velocity = curr_x - self.prev_x
         speed = abs(velocity)
         
-        # 1. Start with zero momentum reward
+        # Start with zero momentum reward
         momentum_reward = 0.0
         
-        # 2. Only reward meaningful movement (Anti-Farming Threshold)
+        # Only reward meaningful movement (Anti-Farming Threshold)
         if speed > 2.0:
             # High speed multiplier (Turbo)
             multiplier = 2.0 if speed > 4.0 else 1.0
-            
-            if velocity > 0:
-                # Goal Reward (Right)
-                momentum_reward = velocity * 0.06 * multiplier
-            else:
-                # Backtracking Reward (Left)
-                momentum_reward = speed * 0.02 * multiplier
+            # Unbiased reward (Speed * 0.06 is the goal rate)
+            momentum_reward = speed * 0.06 * multiplier
                 
         self.prev_x = curr_x
+
+        # Jump Penalty: Deduct points for jumping (actions 2, 3, 8 in Discretizer)
+        # This forces the agent to try running up hills instead of jumping at them.
+        jump_penalty = -0.1 if action in [2, 3, 8] else 0.0
             
-        custom_reward = progress_reward + momentum_reward + time_penalty + life_penalty + win_bonus
+        custom_reward = progress_reward + momentum_reward + time_penalty + life_penalty + win_bonus + jump_penalty
         return obs, float(custom_reward * 0.01), terminated, truncated, info
 
 class TimeLimitWrapper(gym.Wrapper):

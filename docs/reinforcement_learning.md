@@ -92,3 +92,23 @@ We applied a global multiplier of **0.01** to all rewards.
 - Instead of a +10 reward, the agent Sees **+0.1**.
 - This keeps the "Value Function" in a small, stable range.
 - **Result**: The agent remains "curious" for millions of steps, allowing it to actually learn the level instead of panic-committing to one move.
+
+---
+
+## Case Study: Hill Mastery (The "Local Minimum" Problem)
+
+In the final phase of training, we observed Sonic getting stuck in front of vertical hills. He would "jitter" and jump repeatedly but never clear the obstacle.
+
+### 1. The Symptom (Local Minimum)
+Sonic found a "safe" way to get small rewards:
+- **Small Jumps**: He would jump, get a tiny bit of `max_x` progress, fall back, and repeat.
+- **Biased Momentum**: Because running right was worth 3x more than running left, he was afraid to run backward far enough to build the momentum needed for the hill.
+
+### 2. The Solution: SonicRewardV6
+We implemented two specific fixes:
+1. **Unbiased Momentum**: We made momentum rewards the same for both directions. This taught Sonic that "running away" from the hill to build speed is just as valuable as running toward it.
+2. **Jump Penalty**: We added a **-0.1 penalty** for every step spent jumping.
+   - This makes "stutter-jumping" at a hill actually *cost* points.
+   - It forces the agent to explore the "grounded" solution: **Building Momentum**.
+
+**Lesson for Students**: Sometimes your agent finds a "shortcut" that gives small, consistent rewards but prevents them from finding the "big win." Use penalties to discourage these lazy behaviors!

@@ -112,3 +112,23 @@ We implemented two specific fixes:
    - It forces the agent to explore the "grounded" solution: **Building Momentum**.
 
 **Lesson for Students**: Sometimes your agent finds a "shortcut" that gives small, consistent rewards but prevents them from finding the "big win." Use penalties to discourage these lazy behaviors!
+
+---
+
+## Case Study: Momentum Farming (The Upside-Down Reward)
+
+In Phase 6, we tried to help Sonic by rewarding him for running fast. We thought: "If he likes running fast, he will run up the hill!"
+
+### 1. The FAILURE
+Instead of running up the hill, the agent realized:
+> "Wait, I get points for running left and right on the flat ground. The hill is dangerous. I will just run back and forth here forever!"
+
+By giving points for *Unbiased Momentum*, we accidentally created a **Reward Farm**. The agent was getting high scores without ever progressing through the level.
+
+### 2. The Solution: Back to Basics (SonicRewardV7)
+We realized that **Progress** is the only thing that matters.
+- **Removed Momentum Rewards**: Running fast is now worth 0 points.
+- **Removed Jump Penalties**: We don't tell him *how* to move, only *where* to go.
+- **Result**: The "Value Function" was starving. The agent realized: "I am dying and getting no points. The ONLY thing that makes the number go up is moving RIGHT." This forced him to finally challenge the hill on his own terms.
+
+**Lesson for Students**: Be careful with "Shaped Rewards." Sometimes, telling the agent *how* to play distracts it from *winning* the game!

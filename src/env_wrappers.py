@@ -192,28 +192,15 @@ class SonicRewardV0(gym.Wrapper):
         win_bonus = 250.0 if curr_x > 10000 else 0.0
         if win_bonus > 0: terminated = True
             
-        # Momentum Reward (SonicRewardV6 - Hill Mastery): 
-        # 1. REMOVED Bias: Rewards speed in ANY direction equally.
-        # This makes running back for momentum "free" for the agent.
-        # 2. Jump Penalty: Discourages "jitter-jumping" at hills.
-        velocity = curr_x - self.prev_x
-        speed = abs(velocity)
-        
-        # Start with zero momentum reward
+        # Momentum Reward (SonicRewardV7 - Back to Basics):
+        # We REMOVED all momentum rewards and jump penalties.
+        # The experiment showed that "Momentum Reward" caused the agent to farm laps on flat ground
+        # instead of climbing the hill.
+        # Now, the ONLY way to get points is to push max_x forward.
         momentum_reward = 0.0
-        
-        # Only reward meaningful movement (Anti-Farming Threshold)
-        if speed > 2.0:
-            # High speed multiplier (Turbo)
-            multiplier = 2.0 if speed > 4.0 else 1.0
-            # Unbiased reward (Speed * 0.06 is the goal rate)
-            momentum_reward = speed * 0.06 * multiplier
+        jump_penalty = 0.0
                 
         self.prev_x = curr_x
-
-        # Jump Penalty: Deduct points for jumping (actions 2, 3, 8 in Discretizer)
-        # This forces the agent to try running up hills instead of jumping at them.
-        jump_penalty = -0.1 if action in [2, 3, 8] else 0.0
             
         custom_reward = progress_reward + momentum_reward + time_penalty + life_penalty + win_bonus + jump_penalty
         return obs, float(custom_reward * 0.01), terminated, truncated, info

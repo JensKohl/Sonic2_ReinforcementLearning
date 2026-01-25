@@ -59,15 +59,16 @@ def make_env(game, state, stack_frames=4, render=False):
         # which helps build momentum and prevents "jittery" jumping.
         env = FrameSkip(env, skip=4)
         
-        # 3. Reward Shaping: Define what the agent should care about (Speed & Survival)
+        # 3. Discretizer: Convert complex 12-button combo to 10 logical game commands
+        env = SonicDiscretizer(env)
+        
+        # 4. Reward Shaping: Define what the agent should care about (Speed & Survival)
+        # We apply this AFTER the discretizer so it can easily identify jump actions.
         env = SonicRewardV0(env)
         
-        # 3. Visualization: (Optional) Pass frames back to main process for rendering
+        # 5. Visualization: (Optional) Pass frames back to main process for rendering
         if render:
             env = InfoRenderWrapper(env)
-            
-        # 4. Discretizer: Convert complex 12-button combo to 7 logical game commands
-        env = SonicDiscretizer(env)
         
         # 5. Image Processing: Resize 2D pixels and transpose to PyTorch Tensor format (C, H, W)
         env = ResizeObservation(env, 84)

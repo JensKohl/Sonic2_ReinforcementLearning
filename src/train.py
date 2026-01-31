@@ -1,6 +1,7 @@
 import os
 import sys
 import subprocess
+import argparse
 import gymnasium as gym
 
 # --- CRITICAL RETRO COMPATIBILITY BLOCK ---
@@ -72,12 +73,38 @@ class CheckpointCallback(Callback):
         self.run_name = run_name
         os.makedirs(save_path, exist_ok=True)
 
+    def save_checkpoint(self, update, global_step, agent, optimizer):
+        state = {
+            "update": update,
+            "global_step": global_step,
+            "agent_state_dict": agent.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "run_name": self.run_name,
+        }
+        
+        # Save numbered checkpoint
+        path = os.path.join(self.save_path, f"{self.run_name}_step_{global_step}.pth")
+        torch.save(state, path)
+        
+        # Also maintain a 'latest' symlink-like file (just a copy for robustness on Windows)
+        latest_path = os.path.join(self.save_path, "latest_checkpoint.pth")
+        torch.save(state, latest_path)
+        
+        # Also update a text file with the latest run name for easy discovery
+        with open(os.path.join(self.save_path, "latest_run.txt"), "w") as f:
+            f.write(self.run_name)
+
     def on_update(self, update, global_step, train_stats):
-        if global_step % self.save_freq < (global_step - self.save_freq) % self.save_freq: # rough check for freq crossing
-            pass # simplified below
+        if update % self.check_freq_updates() == 0: # Note: check_freq logic below
+            pass
+    
+    def check_freq_updates(self):
+        # We'll just hardcode 50 updates for now as in the original code's if update % 50 == 0
+        return 50
+
+    def on_update_with_data(self, update, global_step, agent, optimizer):
         if update % 50 == 0:
-            path = os.path.join(self.save_path, f"{self.run_name}_step_{global_step}.pth")
-            torch.save(train_stats['agent_state'], path)
+            self.save_checkpoint(update, global_step, agent, optimizer)
 
 class BestModelCallback(Callback):
     def __init__(self, save_path, run_name):
@@ -105,7 +132,15 @@ class BestModelCallback(Callback):
             return True
         return False
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Sonic 2 RL Training")
+    parser.add_argument("--resume", action="store_true", help="Resume from the latest checkpoint")
+    parser.add_argument("--checkpoint", type=str, default=None, help="Specific checkpoint file to resume from")
+    return parser.parse_args()
+
 def train():
+    args = parse_args()
+    
     # Hyperparameters
     exp_name = "Sonic2_PPO"
     gym_id = "SonicTheHedgehog2-Genesis"
@@ -121,9 +156,33 @@ def train():
     gamma = 0.99
     gae_lambda = 0.95
     
-    # Setup
+    # Global State Initialization
+    global_step = 0
+    start_update = 1
     run_name = f"{exp_name}__{int(time.time())}"
-    writer = SummaryWriter(f"logs/{run_name}")
+    checkpoint_path = None
+
+    # Handle Resuming
+    if args.checkpoint:
+        checkpoint_path = args.checkpoint
+    elif args.resume:
+        latest_cp = "models/checkpoints/latest_checkpoint.pth"
+        if os.path.exists(latest_cp):
+            checkpoint_path = latest_cp
+        else:
+            print("Warning: --resume flag set but no latest_checkpoint.pth found. Starting from scratch.")
+
+    checkpoint_data = None
+    if checkpoint_path:
+        print(f"Loading checkpoint from {checkpoint_path}...")
+        checkpoint_data = torch.load(checkpoint_path)
+        global_step = checkpoint_data["global_step"]
+        start_update = checkpoint_data["update"] + 1
+        run_name = checkpoint_data["run_name"]
+        print(f"Resuming run '{run_name}' at update {start_update}, global step {global_step}")
+
+    # Setup
+    writer = SummaryWriter(f"logs/{run_name}", purge_step=global_step if checkpoint_data else None)
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
@@ -136,7 +195,12 @@ def train():
     agent = Agent(envs).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=learning_rate, eps=1e-5)
     
-    algo = PPOAlgo(agent, optimizer, device)
+    # Load state dicts if resuming
+    if checkpoint_data:
+        agent.load_state_dict(checkpoint_data["agent_state_dict"])
+        optimizer.load_state_dict(checkpoint_data["optimizer_state_dict"])
+
+    algo = PPOAlgo(agent, optimizer, device, ent_coef=0.01)
     buffer = RolloutBuffer(num_steps, num_envs, envs.single_observation_space.shape, envs.single_action_space.shape, device)
 
     # Callbacks
@@ -145,8 +209,6 @@ def train():
     # GPU Temperature Safety Callback (Threshold: 85°C, check every 20 updates)
     temp_callback = GPUTemperatureCallback(threshold=85, check_freq=20, writer=writer)
 
-    # Global State
-    global_step = 0
     start_time = time.time()
     
     try:
@@ -154,10 +216,10 @@ def train():
         obs = torch.as_tensor(obs, device=device).float()
         
         num_updates = total_timesteps // batch_size
-        print(f"Starting training for {num_updates} updates...")
+        print(f"Starting training for {num_updates} updates (Current: {start_update}/{num_updates})...")
         
         from tqdm import tqdm
-        for update in tqdm(range(1, num_updates + 1), desc="Training"):
+        for update in tqdm(range(start_update, num_updates + 1), desc="Training"):
             iteration_start_time = time.time()
             buffer.reset()
             
@@ -203,7 +265,7 @@ def train():
                 if "final_info" in infos:
                     for info in infos["final_info"]:
                         if info and "episode" in info:
-                            ep_reward = info['episode']['r']
+                            ep_reward = float(info['episode']['r'])
                             # Log to Tensorboard: Great for long-term graphing
                             writer.add_scalar("charts/episodic_return", ep_reward, global_step)
                             writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
@@ -252,7 +314,7 @@ def train():
                 )
 
             # Periodic Checkpoint
-            checkpoint_callback.on_update(update, global_step, train_stats)
+            checkpoint_callback.on_update_with_data(update, global_step, agent, optimizer)
             
             # GPU Temperature Check
             temp_callback.on_update(update, global_step, train_stats)

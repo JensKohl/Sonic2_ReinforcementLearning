@@ -1,5 +1,11 @@
 import gymnasium as gym
 import sys
+
+# --- CRITICAL RETRO COMPATIBILITY ---
+# Retro depends on the old 'gym' package. We alias 'gym' to 'gymnasium'
+# so that retro works with the newer gymnasium library.
+sys.modules["gym"] = gym
+
 import time
 import random
 import retro
@@ -13,7 +19,7 @@ from src.env_wrappers import (
     RetroCompatibility, 
     TransposeObservation, 
     InfoRenderWrapper, 
-    SonicRewardV0,
+    SonicRewardV13,
     TimeLimitWrapper,
     StagnationWrapper,
     FrameSkip
@@ -53,6 +59,9 @@ def make_env(game, state, stack_frames=4, render=False):
         # This strips 'seed' and 'options' before they hit the raw retro env.
         env = RetroCompatibility(env)
 
+        # 2. Statistics (Track returns and lengths for logging)
+        env = gym.wrappers.RecordEpisodeStatistics(env)
+
         # 2. Frame Skipping (CRITICAL for Momentum):
         # We repeat each action for 4 frames. 
         # This makes the AI feel like it's running at 15 FPS instead of 60 FPS,
@@ -62,9 +71,9 @@ def make_env(game, state, stack_frames=4, render=False):
         # 3. Discretizer: Convert complex 12-button combo to 10 logical game commands
         env = SonicDiscretizer(env)
         
-        # 4. Reward Shaping: Define what the agent should care about (Speed & Survival)
-        # We apply this AFTER the discretizer so it can easily identify jump actions.
-        env = SonicRewardV0(env)
+        # 4. Reward Shaping: Define what the agent should care about (Speed & Progress)
+        # V13 merges discovery, momentum, and fixes the "jump-trap" at hills.
+        env = SonicRewardV13(env)
         
         # 5. Visualization: (Optional) Pass frames back to main process for rendering
         if render:

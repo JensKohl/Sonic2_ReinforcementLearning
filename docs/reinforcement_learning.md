@@ -132,3 +132,92 @@ We realized that **Progress** is the only thing that matters.
 - **Result**: The "Value Function" was starving. The agent realized: "I am dying and getting no points. The ONLY thing that makes the number go up is moving RIGHT." This forced him to finally challenge the hill on his own terms.
 
 **Lesson for Students**: Be careful with "Shaped Rewards." Sometimes, telling the agent *how* to play distracts it from *winning* the game!
+
+---
+
+## Case Study: Context-Aware Rewards (The Physics Teacher)
+
+In Phase 8, we found that "Pure Progress" (V7) was too hard. The agent would get stuck at a wall and just stand there, because it didn't know that running *backwards* was the solution to going forwards.
+
+### 1. The Strategy: "Recovery Mode"
+We implemented a **State-Based Reward System**:
+1.  **Progress Mode (Default)**: Normal rules. Reward `max_x`.
+2.  **Recovery Mode (Trigger)**: If Sonic is stuck at the same spot for **4 seconds**...
+    - **ENABLE**: Rewards for speed and backtracking.
+    - **DISABLE**: Immediately when he breaks his record `max_x`.
+
+### 2. The Impact
+This explicitly teaches the agent a complex sequence:
+> "If you are stuck, back up and run fast!"
+
+By making the momentum reward conditional (Context-Aware), we get the benefits of shaped rewards (teaching skills) without the downsides (farming loops).
+
+---
+
+## Case Study: Spring Farming (SonicRewardV9/V10)
+
+Even with "Recovery Mode," we found a new loophole: **Spring Loops**.
+
+### 1. The Symptom
+The agent would get stuck near a spring (like the one before the waterfall) and bounce on it repeatedly. 
+- While in "Recovery Mode," every bounce provided a small burst of momentum reward.
+- The agent effectively "farmed" the spring until the stagnation timer kicked in.
+
+### 2. The Fix (V9/V10)
+- **V9 (Limiter)**: We added a 10-second timer to Recovery Mode. After 10 seconds, the bonus shut off.
+- **V10 (Penalty)**: We added a specific penalty for jumping while in recovery mode.
+
+### 3. The Result: FAILURE
+While V9 and V10 stopped the infinite farming, they weren't enough to solve the level. The agent became "lazy"—it stopped farming, but it also stopped trying to clear the waterfall hill because the rewards for backtracking were now too small relative to the effort.
+
+---
+
+---
+
+## Case Study: The Waterfall Plateau (Spatial Stalemate)
+
+In Phase 10, we encountered our most significant hurdle: a complete stop at **x=2703**.
+
+### 1. The Symptom (The Eternal Loop)
+After a full 15-million-step run, the agent's progress showed:
+- **Max X reached: 2703** (The base of the first waterfall).
+- **Log Static**: The `best.pth` model had not updated for **5 hours**.
+- **Behavior**: The agent reached the bridge, jittered at the edge, but refused to climb the platforms needed to advance.
+
+### 2. The Cause (Horizontal Blindness)
+Standard RL rewards only care about the X-axis (Right). At the waterfall:
+- Moving Forward (Right) requires first moving **UP** (Vertical).
+- Since moving Up gives 0 points, and the platforming is difficult, the agent decides that standing still is the "safest" way to avoid death while maintaining its high score.
+- **Reward Farming**: Even with stagnation checks, the agent found small "wiggle" movements that satisfied the velocity requirements without clearing the hill.
+
+### 3. The Solution: SonicRewardV11 (The Mountain Climber)
+
+To break the stalemate, we introduced **2D Progress** and **Spatial Memory**:
+
+1.  **Altitude Reward (Y-Axis)**: We now reward Sonic for reducing his `y` coordinate (climbing higher). This makes vertical platforming just as profitable as running right.
+2.  **Tile-Based Curiosity**: We divide the level into **16x16 pixel tiles**. The first time Sonic enters a new tile, he gets a **Discovery Bonus**. 
+    - This creates a "scavenger hunt" effect. 
+    - The agent is now encouraged to explore every corner of the screen, even if those corners don't immediately move him further right.
+
+**Lesson for Students**: When your agent hits a complex 3D obstacle (like a hill or a platforming puzzle), horizontal rewards aren't enough. You must reward the **discovery of space** itself!
+
+---
+
+## Case Study: Physics Commitment (SonicRewardV12)
+
+While V11 broke the "Waterfall Plateau," the agent still struggled with the **Long Vertical Ramp** (around x=4200). 
+
+### 1. The Symptom
+The agent would reach the base of the ramp, try to run up, lose speed halfway, and slide back down. It never learned the **sequence** of preparation required to clear it.
+
+### 2. The Solution: SonicRewardV12 (The Speedster)
+
+We introduced **Procedural Rewards** targeting those specific physics maneuvers:
+
+1.  **Spin Dash Incentive**: Sonic now gets a small reward for holding `DOWN + B` while stopped. This encourages him to "rev up" his speed before moving.
+2.  **Backtrack Credit**: If Sonic is in front of a ramp and runs **LEFT**, he stores "potential energy" in a credit counter.
+3.  **Quadratic Speed Multiplier**: This credit then **multiplies** his future horizontal rewards. 
+    - This creates a market proof for the agent: "Backtracking results in 10x more points per second once I turn back around."
+4.  **Quadratic Velocity**: We reward `speed squared`. This makes the difference between "regular speed" and "Sonic speed" much more dramatic in the logs.
+
+**Lesson for Students**: If your agent fails a physics-based challenge, don't just reward the result (passing). Reward the **preliminary actions** (Backtracking, Revving) that make the result possible!

@@ -156,54 +156,98 @@ class InfoRenderWrapper(gym.Wrapper):
             return obs, info
         return res
 
-class SonicRewardV0(gym.Wrapper):
+class SonicRewardV13(gym.Wrapper):
     """
-    Custom Reward Shaping:
-    Encourages speed-running while penalizing death.
+    SonicRewardV13 (The Balanced Progress Wrapper):
+    Merges discovery, momentum, and altitude logic into a single stream.
+    
+    Fixes the "Jump Trap": Altitude reward is suppressed if the agent jumps 
+    while at the base of a hill, preventing them from trading speed for height.
     """
     def __init__(self, env):
         super().__init__(env)
+        self.visited_tiles = set()
         self.prev_lives = 3
         self.max_x = 0
-
+        self.prev_x = 0
+        self.backtrack_credit = 0.0
+        self.min_y = None
+        
     def reset(self, **kwargs):
         obs, info = self.env.reset(**kwargs)
+        self.visited_tiles = set()
         self.prev_lives = info.get('lives', 3)
         self.max_x = info.get('x', 0)
         self.prev_x = self.max_x
+        self.backtrack_credit = 0.0
+        self.min_y = info.get('y', None)
         return obs, info
 
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
         
         curr_x = info.get('x', 0)
-        progress_reward = max(0, curr_x - self.max_x)
-        self.max_x = max(self.max_x, curr_x)
+        curr_y = info.get('y', 0)
+        velocity_x = curr_x - self.prev_x
         
-        # Time pressure
-        time_penalty = -0.005
+        # 1. DISCOVERY (Exploration)
+        discovery_bonus = 0.0
+        tile = (curr_x // 16, curr_y // 16)
+        if tile not in self.visited_tiles:
+            self.visited_tiles.add(tile)
+            discovery_bonus = 0.01 # Subtle hint to explore
+            
+        # 2. SPIN DASH (Preparation)
+        spin_dash_reward = 0.0
+        if action in [7, 9] and abs(velocity_x) < 1:
+            spin_dash_reward = 0.05
+            
+        # 3. BACKTRACK & MOMENTUM
+        in_ramp_zone = (2600 < curr_x < 2800) or (4000 < curr_x < 4400)
+        if in_ramp_zone and velocity_x < -1:
+            self.backtrack_credit = min(20.0, self.backtrack_credit + 0.5)
+            
+        speed = max(0, velocity_x)
+        speed_factor = 1.0 + (self.backtrack_credit * 0.1)
+        momentum_reward = (speed ** 2) * 0.02 * speed_factor
         
-        # Survival
+        # 4. HORIZONTAL PROGRESS (Main Objective)
+        # Scaled up past the waterfall (x=2400) to ensure it's priority #1
+        progress_mult = 2.0 if curr_x > 2400 else 1.0
+        progress_reward = 0.0
+        if curr_x > self.max_x:
+            progress_reward = (curr_x - self.max_x) * (1.0 + self.backtrack_credit * 0.2) * progress_mult
+            self.max_x = curr_x
+            self.backtrack_credit = max(0, self.backtrack_credit - 1.0)
+            
+        # 5. ALTITUDE (Climbing)
+        # FIX: Only reward height gain if NOT jumping (to force running up the ramp)
+        # and only if moving forward.
+        # Action 2, 3, 8 involve jumping (B/A buttons)
+        altitude_reward = 0.0
+        is_jumping = action in [2, 3, 8, 9] # Using discretizer indices
+        if curr_x > 2000 and self.min_y is not None and not is_jumping:
+             if curr_y < self.min_y and velocity_x > 0:
+                 altitude_reward = (self.min_y - curr_y) * 0.5
+                 self.min_y = curr_y
+        elif self.min_y is None or (curr_x < self.prev_x - 5): # Reset min_y if we fell back
+             self.min_y = curr_y
+        
+        # 6. PENALTIES
         curr_lives = info.get('lives', 3)
-        life_penalty = -50.0 if curr_lives < self.prev_lives else 0.0
+        life_penalty = -100.0 if curr_lives < self.prev_lives else 0.0
         self.prev_lives = curr_lives
         
-        # Win condition
-        win_bonus = 250.0 if curr_x > 10000 else 0.0
+        win_bonus = 500.0 if curr_x > 10000 else 0.0
         if win_bonus > 0: terminated = True
-            
-        # Momentum Reward (SonicRewardV7 - Back to Basics):
-        # We REMOVED all momentum rewards and jump penalties.
-        # The experiment showed that "Momentum Reward" caused the agent to farm laps on flat ground
-        # instead of climbing the hill.
-        # Now, the ONLY way to get points is to push max_x forward.
-        momentum_reward = 0.0
-        jump_penalty = 0.0
-                
+
         self.prev_x = curr_x
-            
-        custom_reward = progress_reward + momentum_reward + time_penalty + life_penalty + win_bonus + jump_penalty
-        return obs, float(custom_reward * 0.01), terminated, truncated, info
+        self.prev_y = curr_y
+
+        total_custom = progress_reward + spin_dash_reward + momentum_reward + \
+                       altitude_reward + discovery_bonus + life_penalty + win_bonus - 0.01
+        
+        return obs, float(total_custom * 0.01), terminated, truncated, info
 
 class TimeLimitWrapper(gym.Wrapper):
     """
@@ -238,7 +282,6 @@ class StagnationWrapper(gym.Wrapper):
         self.max_stagnant_steps = max_stagnant_steps
         self.current_stagnant_steps = 0
         self.last_x = 0
-        self.total_movement_in_window = 0
         self.max_x = 0
 
     def step(self, action):
@@ -246,28 +289,25 @@ class StagnationWrapper(gym.Wrapper):
         
         curr_x = info.get('x', 0)
         
-        # We track "Total Movement" (distance traveled)
-        # This allows Sonic to run back and forth without stalling the timer.
-        dist_moved = abs(curr_x - self.last_x)
-        self.total_movement_in_window += dist_moved
+        # We track progress toward max_x
         self.last_x = curr_x
         self.current_stagnant_steps += 1
             
         if self.current_stagnant_steps >= self.max_stagnant_steps:
-            # If total distance moved in 30 seconds is less than 600 pixels (Turbo Update), he's stuck.
-            # 600 pixels / 1800 steps = 0.33 pixels/step average (prevents wiggling)
-            if self.total_movement_in_window < 600:
+            # If max_x hasn't increased in 30 seconds, Sonic is stuck.
+            # This is much stricter than movement tracking and prevents behavioral loops.
+            if curr_x <= self.max_x:
                 truncated = True
             else:
-                # Reset the window but keep going
+                # Progress was made, reset the window
+                self.max_x = curr_x
                 self.current_stagnant_steps = 0
-                self.total_movement_in_window = 0
             
         return obs, reward, terminated, truncated, info
 
     def reset(self, **kwargs):
         self.current_stagnant_steps = 0
-        self.total_movement_in_window = 0
         obs, info = self.env.reset(**kwargs)
         self.last_x = info.get('x', 0)
+        self.max_x = self.last_x
         return obs, info

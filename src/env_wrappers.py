@@ -2,8 +2,15 @@ import gymnasium as gym
 import numpy as np
 import cv2
 
+# =============================================================================
+# PREPROCESSING WRAPPERS
+# =============================================================================
+
 class FrameSkip(gym.Wrapper):
     """
+    #### Wrapper: FrameSkip
+    **Concept**: Temporal Abstraction.
+    
     Repeats the same action for 'skip' frames.
     This is standard in Atari/Retro RL because it helps the agent 
     build momentum and reduces the "jittery" behavior of picking 
@@ -16,8 +23,13 @@ class FrameSkip(gym.Wrapper):
     def step(self, action):
         total_reward = 0.0
         for _ in range(self.skip):
+            # We perform the same action multiple times. 
+            # In Sonic, physics (velocity) takes several frames to build up, 
+            # so acting every single frame (at 60Hz) is too fast for the AI 
+            # to "see" the results of its actions clearly.
             obs, reward, terminated, truncated, info = self.env.step(action)
             total_reward += reward
+            # If the episode ends mid-skip, we stop immediately.
             if terminated or truncated:
                 break
         return obs, total_reward, terminated, truncated, info
@@ -33,8 +45,10 @@ class RetroCompatibility(gym.Wrapper):
         
     def step(self, action):
         obs, reward, done, info = self.env.step(action)
-        terminated = done # Terminated means the game ended (Level won or Sonic died)
-        truncated = False # Truncated means the time ran out (not used here)
+        # 'terminated' = Sonic died or beat the level.
+        # 'truncated' = Time limit hit (handled by a separate wrapper).
+        terminated = done 
+        truncated = False 
         return obs, reward, terminated, truncated, info
     
     def reset(self, **kwargs):
@@ -43,21 +57,38 @@ class RetroCompatibility(gym.Wrapper):
         kwargs.pop('seed', None)
         kwargs.pop('options', None)
         obs = self.env.reset(**kwargs)
-        if isinstance(obs, tuple): return obs
+        # Ensure we always return (observation, info_dict)
+        if isinstance(obs, tuple):
+            return obs
         return obs, {}
 
 class SonicDiscretizer(gym.ActionWrapper):
     """
-    Reduces the MultiBinary(12) Genesis controller to a few useful Discrete actions.
-    This simplifies the search space for the RL agent significantly.
+    #### Wrapper: SonicDiscretizer
+    **Concept**: Action Space Reduction.
+    
+    The Genesis has 12 buttons. The AI could theoretically press any combination (2^12 = 4096).
+    Most of these (like UP+DOWN or START+A) are useless or invalid.
+    Hence, this simplifies the search space for the RL agent significantly.
+    
+    We map the 4000+ possibilities down to ~10 logical "Game Intents":
+    - Move Left / Move Right
+    - Jump Left / Jump Right
+    - Spin Dash / Crouch / Jump in place
+    
+    This makes it 400x easier for the AI to find a good policy.
     """
     def __init__(self, env):
         super().__init__(env)
         buttons = ["B", "A", "MODE", "START", "UP", "DOWN", "LEFT", "RIGHT", "C", "Y", "X", "Z"]
         actions = [
-            ['LEFT'], ['RIGHT'], ['LEFT', 'B'], ['RIGHT', 'B'], 
-            ['LEFT', 'DOWN'], ['RIGHT', 'DOWN'], ['DOWN'], ['DOWN', 'B'], 
-            ['B'], ['DOWN', 'A'] # Added A as alternative Spin Dash button
+            ['LEFT'], ['RIGHT'],           # Basic movement
+            ['LEFT', 'B'], ['RIGHT', 'B'], # Jumping with direction
+            ['LEFT', 'DOWN'], ['RIGHT', 'DOWN'], # Ducking while moving (rolling)
+            ['DOWN'],                      # Crouch
+            ['DOWN', 'B'],                 # Spin Dash Charge
+            ['B'],                         # Jump in place
+            ['DOWN', 'A']                  # Alt Spin Dash button
         ]
         self._actions = []
         for action in actions:
@@ -65,6 +96,7 @@ class SonicDiscretizer(gym.ActionWrapper):
             for button in action:
                 arr[buttons.index(button)] = True
             self._actions.append(arr)
+        # Tell Gymnasium we now only have 10-11 possible discrete actions.
         self.action_space = gym.spaces.Discrete(len(self._actions))
 
     def action(self, action):
@@ -72,22 +104,35 @@ class SonicDiscretizer(gym.ActionWrapper):
 
 class ResizeObservation(gym.ObservationWrapper):
     """
-    Resizes the 320x224 Genesis output to a standard 84x84 square.
-    This makes the input 7x smaller, which makes the AI 7x faster!
+    #### Wrapper: ResizeObservation
+    **Concept**: Dimensionality Reduction.
+    
+    The raw Genesis image is 320x224 pixels in full color.
+    That's 215,040 numbers the AI has to process every frame.
+    By resizing to 84x84, we reduce the data by ~90% without losing 
+    essential information (like obstacles or platforms).
     """
     def __init__(self, env, shape=84):
         super().__init__(env)
         self.shape = (shape, shape) if isinstance(shape, int) else tuple(shape)
-        # We tell the AI that the screen size has changed to 84x84.
+        # Update the observation space metadata so the AI knows to expect 84x84.
         obs_shape = self.shape + self.observation_space.shape[2:]
         self.observation_space = gym.spaces.Box(low=0, high=255, shape=obs_shape, dtype=np.uint8)
 
     def observation(self, observation):
-        # We use 'INTER_NEAREST' because it's the fastest way to resize images.
+        # CV2 handles the pixel resampling. 
+        # 'INTER_NEAREST' is fastest way to resize images while preserving pixel sharpess.
         return cv2.resize(observation, self.shape, interpolation=cv2.INTER_NEAREST)
 
 class TransposeObservation(gym.ObservationWrapper):
-    """Converts (H, W, C) to (C, H, W) to match PyTorch expectations."""
+    """
+    #### Wrapper: TransposeObservation
+    **Concept**: Tensor Formatting.
+    
+    OpenCV/Gym use (Height, Width, Channels). 
+    PyTorch expects (Channels, Height, Width).
+    This wrapper swaps the axes so the Deep Learning model can read the image.
+    """
     def __init__(self, env):
         super().__init__(env)
         obs_shape = self.observation_space.shape
@@ -100,41 +145,47 @@ class TransposeObservation(gym.ObservationWrapper):
 
 class PyTorchFrameStack(gym.Wrapper):
     """
-    Stacks k consecutive frames (usually 4) in one big pile.
-    If the AI only sees 1 frame, it doesn't know if Sonic is moving.
-    By seeing 4 frames at once, it can see Sonic's velocity and acceleration.
+    #### Wrapper: PyTorchFrameStack
+    **Concept**: Velocity Encoding.
+    
+    A single static image doesn't tell you if Sonic is moving.
+    By stacking the last 4 frames together, the AI can "see" motion across time.
+    Imagine a flip-book: seeing 4 pages at once lets you perceive the trajectory of a jump.
     """
     def __init__(self, env, k):
         super().__init__(env)
         self.k = k
         self.frames = []
         shp = env.observation_space.shape
-        # New shape will be (k * Channels, Height, Width)
+        # The new input channel count is (Original Channels * k)
         self.observation_space = gym.spaces.Box(
             low=0, high=255, shape=(shp[0] * k, shp[1], shp[2]), dtype=env.observation_space.dtype
         )
 
     def reset(self, **kwargs):
-        # When the game restarts, we fill the stack with the first frame 4 times.
+        # On reset, we don't have history yet, so we stack the first frame k times.
         ob, info = self.env.reset(**kwargs)
         self.frames = [ob] * self.k
         return self._get_ob(), info
 
     def step(self, action):
-        # Every step, we add the new frame and throw away the oldest one.
+        # Update the stack: pop the oldest, push the newest.
         ob, reward, terminated, truncated, info = self.env.step(action)
         self.frames.append(ob)
         self.frames.pop(0)
         return self._get_ob(), reward, terminated, truncated, info
 
     def _get_ob(self):
-        # Glue the 4 frames together into one big observation.
         return np.concatenate(self.frames, axis=0)
 
 class InfoRenderWrapper(gym.Wrapper):
     """
-    Periodic frame capture for visualization.
-    Only captures every 'frequency' steps to minimize IPC bottleneck.
+    #### Wrapper: InfoRenderWrapper
+    **Concept**: Debug Visualization.
+    
+    Periodically saves the high-resolution screen into the 'info' dict.
+    This allows us to record high-quality video without slowing down the AI,
+    because we only "take a picture" every 16 steps.
     """
     def __init__(self, env, frequency=16):
         super().__init__(env)
@@ -144,6 +195,7 @@ class InfoRenderWrapper(gym.Wrapper):
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
         self.step_count += 1
+        # Extract the raw screen from the emulator core.
         info["render_frame"] = self.env.unwrapped.get_screen() if self.step_count % self.frequency == 0 else None
         return obs, reward, terminated, truncated, info
 
@@ -156,103 +208,151 @@ class InfoRenderWrapper(gym.Wrapper):
             return obs, info
         return res
 
-class SonicRewardV13(gym.Wrapper):
+class SonicRewardV15(gym.Wrapper):
     """
-    SonicRewardV13 (The Balanced Progress Wrapper):
-    Merges discovery, momentum, and altitude logic into a single stream.
+    #### Wrapper: SonicRewardV15 (The Hazard-Aware Policy)
+    **Concept**: Reward Engineering / Shaping.
     
-    Fixes the "Jump Trap": Altitude reward is suppressed if the agent jumps 
-    while at the base of a hill, preventing them from trading speed for height.
+    This is the "Brain" of the project's incentive system. We guide the AI
+    by giving it "treats" (positive reward) for progress and "shocks" (negative reward)
+    for mistakes.
+    
+    **V15 Features**:
+    1. **Hazard Avoidance**: Penalizes ring loss. Touching spikes "hurts" immediately.
+    2. **Loop Navigation**: Incentivizes high-speed movement and spin-dashing.
+    3. **Vertical Progress**: Rewards climbing platforms without "cheating" by jumping.
+    4. **Anti-Stagnation**: Pushes the agent to jump or dash if stuck against a wall.
     """
     def __init__(self, env):
         super().__init__(env)
-        self.visited_tiles = set()
+        self.visited_tiles = set() # Exploration tracking (16x16 pixel grid)
         self.prev_lives = 3
+        self.prev_rings = 0
         self.max_x = 0
         self.prev_x = 0
-        self.backtrack_credit = 0.0
-        self.min_y = None
+        self.backtrack_credit = 0.0 # "Gift" to spend on forward speed if we run-up
+        self.min_y = None           # Tracks highest altitude reached
+        self.stagnant_steps = 0     # Counter for inactivity
         
     def reset(self, **kwargs):
         obs, info = self.env.reset(**kwargs)
         self.visited_tiles = set()
         self.prev_lives = info.get('lives', 3)
+        self.prev_rings = info.get('rings', 0)
         self.max_x = info.get('x', 0)
         self.prev_x = self.max_x
         self.backtrack_credit = 0.0
         self.min_y = info.get('y', None)
+        self.stagnant_steps = 0
         return obs, info
 
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
         
+        # Pull level specific variables from the game RAM
         curr_x = info.get('x', 0)
         curr_y = info.get('y', 0)
+        curr_rings = info.get('rings', 0)
+        curr_lives = info.get('lives', 3)
         velocity_x = curr_x - self.prev_x
         
         # 1. DISCOVERY (Exploration)
+        # Give a tiny one-time reward for every 16x16 pixel square visited.
+        # This prevents the AI from just standing still.
         discovery_bonus = 0.0
         tile = (curr_x // 16, curr_y // 16)
         if tile not in self.visited_tiles:
             self.visited_tiles.add(tile)
-            discovery_bonus = 0.01 # Subtle hint to explore
+            discovery_bonus = 0.01 
             
-        # 2. SPIN DASH (Preparation)
+        # 2. SPIN DASH (Intent)
+        # Charging a spin dash (DOWN+B) when stuck/stopped.
+        # Incentivize charging a spin dash (DOWN + B/A) when stationary.
+        # This is CRITICAL for loops and steep ramps.
         spin_dash_reward = 0.0
         if action in [7, 9] and abs(velocity_x) < 1:
-            spin_dash_reward = 0.05
+            spin_dash_reward = 0.1
             
-        # 3. BACKTRACK & MOMENTUM
+        # 3. BACKTRACK & MOMENTUM (Physics)
+        # If the AI walks backwards in a ramp zone, we give it "credit".
+        # This allows it to "spend" that credit for EXTRA reward when it runs forward.
+        # This specifically teaches the concept of "Run-up space".
         in_ramp_zone = (2600 < curr_x < 2800) or (4000 < curr_x < 4400)
         if in_ramp_zone and velocity_x < -1:
             self.backtrack_credit = min(20.0, self.backtrack_credit + 0.5)
             
+        # 4. MOMENTUM (Speed)
+        # Quadratic reward for speed. Faster = exponentially more reward.
         speed = max(0, velocity_x)
         speed_factor = 1.0 + (self.backtrack_credit * 0.1)
         momentum_reward = (speed ** 2) * 0.02 * speed_factor
         
-        # 4. HORIZONTAL PROGRESS (Main Objective)
-        # Scaled up past the waterfall (x=2400) to ensure it's priority #1
-        progress_mult = 2.0 if curr_x > 2400 else 1.0
+        # 4. HORIZONTAL PROGRESS (Main Goal)
+        # The primary reward comes from increasing the 'max_x' reached.
+        progress_mult = 2.0 if curr_x > 2400 else 1.0 # High stakes after the first loop
         progress_reward = 0.0
         if curr_x > self.max_x:
             progress_reward = (curr_x - self.max_x) * (1.0 + self.backtrack_credit * 0.2) * progress_mult
             self.max_x = curr_x
+            # As max_x increases, we "consume" the backtrack credit.
             self.backtrack_credit = max(0, self.backtrack_credit - 1.0)
+            self.stagnant_steps = 0
+        else:
+            self.stagnant_steps += 1
             
-        # 5. ALTITUDE (Climbing)
-        # FIX: Only reward height gain if NOT jumping (to force running up the ramp)
-        # and only if moving forward.
-        # Action 2, 3, 8 involve jumping (B/A buttons)
+        # 5. ALTITUDE (Restore V14 Power)
+        # We reward climbing platforms (Lower Y = higher up).
+        # Threshold lowered to 0.5 to allow rewards while grinding up steep slopes.
         altitude_reward = 0.0
-        is_jumping = action in [2, 3, 8, 9] # Using discretizer indices
-        if curr_x > 2000 and self.min_y is not None and not is_jumping:
-             if curr_y < self.min_y and velocity_x > 0:
-                 altitude_reward = (self.min_y - curr_y) * 0.5
-                 self.min_y = curr_y
-        elif self.min_y is None or (curr_x < self.prev_x - 5): # Reset min_y if we fell back
+        is_jumping = action in [2, 3, 8, 9]
+        can_reward_height = (not is_jumping) or (velocity_x > 0.5)
+        
+        if curr_x > 2000 and self.min_y is not None and can_reward_height:
+             if curr_y < self.min_y:
+                 altitude_reward = (self.min_y - curr_y) * 2.0  # Restored to 2.0
+                 self.min_y = curr_y 
+        elif self.min_y is None or (curr_x < self.prev_x - 5):
              self.min_y = curr_y
-        
-        # 6. PENALTIES
-        curr_lives = info.get('lives', 3)
-        life_penalty = -100.0 if curr_lives < self.prev_lives else 0.0
+
+        # 6. STAGNATION RECOVERY
+        # If the AI is pushing against a wall (RIGHT) for 30 steps without moving,
+        # reward Dash/Jump actions to help it find a way over.
+        recovery_bonus = 0.0
+        if self.stagnant_steps > 30 and action in [1, 3, 5] and velocity_x < 0.1:
+            if action in [8, 7, 9]:
+                recovery_bonus = 0.2
+
+        # 7. HAZARDS & PENALTIES (V14 Restoration)
+        # Reverting to the simpler V14 penalty structure to restore performance.
+        life_penalty = -1000.0 if curr_lives < self.prev_lives else 0.0
+        ring_penalty = 0.0 # Removed high-frequency penalty to reduce hesitation
+            
         self.prev_lives = curr_lives
+        self.prev_rings = curr_rings
         
+        # 8. VICTORY
+        # Reaching X=10000 is effectively beating the level.
         win_bonus = 500.0 if curr_x > 10000 else 0.0
-        if win_bonus > 0: terminated = True
+        if win_bonus > 0:
+            terminated = True
 
         self.prev_x = curr_x
         self.prev_y = curr_y
 
+        # Combine everything and scale down to stable range (usually +/- 1.0 per step)
         total_custom = progress_reward + spin_dash_reward + momentum_reward + \
-                       altitude_reward + discovery_bonus + life_penalty + win_bonus - 0.01
+                       altitude_reward + discovery_bonus + life_penalty + ring_penalty + \
+                       win_bonus + recovery_bonus 
         
         return obs, float(total_custom * 0.01), terminated, truncated, info
 
 class TimeLimitWrapper(gym.Wrapper):
     """
-    Stops the episode after a fixed number of steps.
-    This encourages the agent to find the finish line faster.
+    #### Wrapper: TimeLimitWrapper
+    
+    Stops the episode after a fixed number of steps (3 minutes).
+    Forces the AI to be efficient. Without this, it might decide that 
+    the safest way to live is to stand still forever.
     """
     def __init__(self, env, max_steps=10800): # 10,800 steps = 3 minutes at 60 FPS
         super().__init__(env)
@@ -274,8 +374,11 @@ class TimeLimitWrapper(gym.Wrapper):
 
 class StagnationWrapper(gym.Wrapper):
     """
-    Truncates the episode if the agent's x-coordinate doesn't increase for a while.
-    This prevents the agent from getting stuck behind obstacles for too long.
+    #### Wrapper: StagnationWrapper
+    
+    Stops the episode if the agent doesn't beat its personal 'max_x' record
+    for a long period (30 seconds). This efficiently cuts short "boring" 
+    episodes where the agent is just running into a corner.
     """
     def __init__(self, env, max_stagnant_steps=1800): # 30 seconds at 60 FPS
         super().__init__(env)
@@ -286,10 +389,7 @@ class StagnationWrapper(gym.Wrapper):
 
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
-        
         curr_x = info.get('x', 0)
-        
-        # We track progress toward max_x
         self.last_x = curr_x
         self.current_stagnant_steps += 1
             
@@ -297,9 +397,10 @@ class StagnationWrapper(gym.Wrapper):
             # If max_x hasn't increased in 30 seconds, Sonic is stuck.
             # This is much stricter than movement tracking and prevents behavioral loops.
             if curr_x <= self.max_x:
+                # Sonic is officially "stuck"
                 truncated = True
             else:
-                # Progress was made, reset the window
+                # New record! Reset the timer.
                 self.max_x = curr_x
                 self.current_stagnant_steps = 0
             

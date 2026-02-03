@@ -3,6 +3,10 @@ import sys
 from src.utils import make_env
 
 def test():
+    """
+    Smoke Test: Can we create the Sonic environment without crashing?
+    This verifies that the ROM is found and the wrappers are working.
+    """
     print("Testing make_env returns...")
     fn = make_env("SonicTheHedgehog2-Genesis", "EmeraldHillZone.Act1")
     env = fn()

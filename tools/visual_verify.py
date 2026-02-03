@@ -10,12 +10,20 @@ from src.agent import Agent
 from src.utils import make_env
 
 class DummyEnvs:
+    """
+    Wraps a single environment to look like a vectorized (parallel) environment 
+    so the Agent class can accept it without crashing.
+    """
     def __init__(self, env):
         self.single_observation_space = env.observation_space
         self.single_action_space = env.action_space
         self.is_vector_env = False
 
 def visual_verify(model_path, targets=[2720, 4400, 6000]):
+    """
+    Runs the agent and saves a screenshot whenever it reaches specific X-coordinates (targets).
+    Useful for verifying if the agent can reach the Loop (2720), the Hill (4400), or the End (6000).
+    """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Visually verifying {model_path} targets: {targets}")
     
@@ -25,6 +33,10 @@ def visual_verify(model_path, targets=[2720, 4400, 6000]):
     agent = Agent(DummyEnvs(env)).to(device)
     checkpoint = torch.load(model_path, map_location=device)
     agent.load_state_dict(checkpoint["agent_state_dict"] if "agent_state_dict" in checkpoint else checkpoint)
+    
+    # [IMPORTANT] Determine vs Random
+    # .eval() disables random noise layers (if any), but our PPO agent also chooses actions probabilistically.
+    # The agent.get_action_and_value() method handles that sampling.
     agent.eval()
     
     obs, info = env.reset()

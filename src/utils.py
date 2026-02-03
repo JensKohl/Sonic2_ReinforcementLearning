@@ -19,7 +19,7 @@ from src.env_wrappers import (
     RetroCompatibility, 
     TransposeObservation, 
     InfoRenderWrapper, 
-    SonicRewardV13,
+    SonicRewardV16,
     TimeLimitWrapper,
     StagnationWrapper,
     FrameSkip
@@ -63,17 +63,16 @@ def make_env(game, state, stack_frames=4, render=False):
         env = gym.wrappers.RecordEpisodeStatistics(env)
 
         # 2. Frame Skipping (CRITICAL for Momentum):
-        # We repeat each action for 4 frames. 
-        # This makes the AI feel like it's running at 15 FPS instead of 60 FPS,
-        # which helps build momentum and prevents "jittery" jumping.
-        env = FrameSkip(env, skip=4)
+        # We repeat each action for 3 frames (Default was 4).
+        # Reducing to 3 gives finer control without overloading the CPU.
+        env = FrameSkip(env, skip=3)
         
         # 3. Discretizer: Convert complex 12-button combo to 10 logical game commands
         env = SonicDiscretizer(env)
         
         # 4. Reward Shaping: Define what the agent should care about (Speed & Progress)
-        # V13 merges discovery, momentum, and fixes the "jump-trap" at hills.
-        env = SonicRewardV13(env)
+        # V15 adds hazard awareness (ring loss penalties) and stiffer death penalties.
+        env = SonicRewardV16(env)
         
         # 5. Visualization: (Optional) Pass frames back to main process for rendering
         if render:

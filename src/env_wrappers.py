@@ -208,7 +208,7 @@ class InfoRenderWrapper(gym.Wrapper):
             return obs, info
         return res
 
-class SonicRewardV15(gym.Wrapper):
+class SonicRewardV16(gym.Wrapper):
     """
     #### Wrapper: SonicRewardV15 (The Hazard-Aware Policy)
     **Concept**: Reward Engineering / Shaping.
@@ -217,11 +217,11 @@ class SonicRewardV15(gym.Wrapper):
     by giving it "treats" (positive reward) for progress and "shocks" (negative reward)
     for mistakes.
     
-    **V15 Features**:
-    1. **Hazard Avoidance**: Penalizes ring loss. Touching spikes "hurts" immediately.
-    2. **Loop Navigation**: Incentivizes high-speed movement and spin-dashing.
-    3. **Vertical Progress**: Rewards climbing platforms without "cheating" by jumping.
-    4. **Anti-Stagnation**: Pushes the agent to jump or dash if stuck against a wall.
+    **V16 Features**:
+    1. **Restored Vertical Mastery**: 2.0 altitude reward and 0.5 speed threshold (from V14).
+    2. **Hazard Awareness**: Calibrated penalties for ring loss (-400) and death (-2500).
+    3. **No Time Tax**: Removed the small step penalty to avoid rushed, reckless maneuvers.
+    4. **Loop Navigation**: Incentivizes high-speed movement and spin-dashing.
     """
     def __init__(self, env):
         super().__init__(env)
@@ -322,10 +322,13 @@ class SonicRewardV15(gym.Wrapper):
             if action in [8, 7, 9]:
                 recovery_bonus = 0.2
 
-        # 7. HAZARDS & PENALTIES (V14 Restoration)
-        # Reverting to the simpler V14 penalty structure to restore performance.
-        life_penalty = -1000.0 if curr_lives < self.prev_lives else 0.0
-        ring_penalty = 0.0 # Removed high-frequency penalty to reduce hesitation
+        # 7. HAZARDS & PENALTIES (V16 Calibrated Safety)
+        # We increase the stakes for death and add an "ouch" signal for ring loss.
+        # -400.0 is significant enough to avoid spikes but shouldn't cause loop-hesitation.
+        life_penalty = -2500.0 if curr_lives < self.prev_lives else 0.0
+        ring_penalty = 0.0
+        if curr_rings < self.prev_rings and curr_lives == self.prev_lives:
+            ring_penalty = -400.0
             
         self.prev_lives = curr_lives
         self.prev_rings = curr_rings

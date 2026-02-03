@@ -29,12 +29,24 @@ from src.agent import Agent
 from src.ppo import PPOAlgo, RolloutBuffer
 
 class Callback:
+    """
+    Base class for training callbacks. 
+    Callbacks allow us to "hook" into the training loop and perform actions 
+    at specific moments (like every step or every network update).
+    """
     def on_step(self, global_step, infos):
+        """Called after every environment step."""
         pass
     def on_update(self, update, global_step, train_stats):
+        """Called after a full PPO network update."""
         pass
 
 class GPUTemperatureCallback(Callback):
+    """
+    Safety mechanism: Monitors the GPU temperature during training.
+    If the GPU gets too hot (threshold), it stops training to protect the hardware.
+    This is especially important on Windows laptops or single-GPU desktop setups.
+    """
     def __init__(self, threshold=85, check_freq=10, writer=None):
         self.threshold = threshold
         self.check_freq = check_freq
@@ -67,6 +79,12 @@ class GPUTemperatureCallback(Callback):
                 print(f"Warning: GPU Temperature check failed: {e}")
 
 class CheckpointCallback(Callback):
+    """
+    The "Save Game" system for AI training.
+    Saves the entire state of the agent and optimizer periodically.
+    This allows us to resume training if the computer crashes or if we want 
+    to test an earlier version of the AI.
+    """
     def __init__(self, save_freq, save_path, run_name):
         self.save_freq = save_freq
         self.save_path = save_path
@@ -107,6 +125,11 @@ class CheckpointCallback(Callback):
             self.save_checkpoint(update, global_step, agent, optimizer)
 
 class BestModelCallback(Callback):
+    """
+    Hall of Fame system: Keeps track of the highest score (reward) achieved.
+    Whenever the agent breaks its own record, this callback saves the current 
+    model as the new "best.pth".
+    """
     def __init__(self, save_path, run_name):
         self.save_path = save_path
         self.run_name = run_name
@@ -175,14 +198,25 @@ def train():
     checkpoint_data = None
     if checkpoint_path:
         print(f"Loading checkpoint from {checkpoint_path}...")
-        checkpoint_data = torch.load(checkpoint_path)
-        global_step = checkpoint_data["global_step"]
-        start_update = checkpoint_data["update"] + 1
-        run_name = checkpoint_data["run_name"]
-        print(f"Resuming run '{run_name}' at update {start_update}, global step {global_step}")
+        loaded_data = torch.load(checkpoint_path)
+        
+        if isinstance(loaded_data, dict) and "global_step" in loaded_data:
+            # Full Checkpoint
+            checkpoint_data = loaded_data
+            global_step = checkpoint_data["global_step"]
+            start_update = checkpoint_data["update"] + 1
+            run_name = checkpoint_data["run_name"]
+            print(f"Resuming run '{run_name}' at update {start_update}, global step {global_step}")
+        else:
+            # Weight-only checkpoint (e.g. best.pth)
+            print("Detected weight-only checkpoint. Starting fine-tuning run.")
+            # We treat the loaded data as the state dict
+            checkpoint_data = loaded_data
+            # Start fresh counters
+            run_name = f"{exp_name}_finetune_{int(time.time())}"
 
     # Setup
-    writer = SummaryWriter(f"logs/{run_name}", purge_step=global_step if checkpoint_data else None)
+    writer = SummaryWriter(f"logs/{run_name}", purge_step=global_step if (checkpoint_data and "global_step" in checkpoint_data) else None)
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
@@ -197,8 +231,12 @@ def train():
     
     # Load state dicts if resuming
     if checkpoint_data:
-        agent.load_state_dict(checkpoint_data["agent_state_dict"])
-        optimizer.load_state_dict(checkpoint_data["optimizer_state_dict"])
+        if isinstance(checkpoint_data, dict) and "agent_state_dict" in checkpoint_data:
+            agent.load_state_dict(checkpoint_data["agent_state_dict"])
+            optimizer.load_state_dict(checkpoint_data["optimizer_state_dict"])
+        else:
+            print("Loading weights from state dictionary...")
+            agent.load_state_dict(checkpoint_data)
 
     algo = PPOAlgo(agent, optimizer, device, ent_coef=0.01)
     buffer = RolloutBuffer(num_steps, num_envs, envs.single_observation_space.shape, envs.single_action_space.shape, device)

@@ -15,9 +15,20 @@ logs_stacking/
 logs/
 *.zip
 *.csv
+*.pth
 
-# Ignore video recordings
+# Ignore diagnostics and temporary reports
+diag_*.txt
+latest_diag.txt
+current_*.txt
+reliability_*.txt
+visual_diag_report.txt
+
+# Ignore video recordings and media
 videos/
+*.mp4
+*.jpg
+*.png
 
 # Ignore models
 models/
@@ -26,5 +37,6 @@ models/
 ROMS/
 
 # System files
-__pycache__/
 .env
+.DS_Store
+Thumbs.db

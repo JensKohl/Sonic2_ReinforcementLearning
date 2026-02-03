@@ -3,6 +3,11 @@ import sys
 import os
 
 def debug_video(video_path):
+    """
+    Diagnostic tool to check if a video file is corrupted.
+    It prints metadata (Resolution, FPS) and tries to extract the last frame.
+    Useful for verifying if a 3-minute recording actually finished successfully.
+    """
     print(f"Checking video: {video_path}")
     if not os.path.exists(video_path):
         print("File does not exist.")

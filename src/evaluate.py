@@ -25,6 +25,11 @@ from src.utils import make_env
 from src.agent import Agent
 
 def evaluate(model_path=None, episodes=1):
+    """
+    Runs the agent in 'Inference Mode' (Play Mode).
+    Unlike training, this doesn't update any weights. It just runs the game 
+    so you can watch the agent play.
+    """
     gym_id = "SonicTheHedgehog2-Genesis"
     state = "EmeraldHillZone.Act1"
     
@@ -44,7 +49,11 @@ def evaluate(model_path=None, episodes=1):
     
     if model_path:
         print(f"Loading model from {model_path}")
-        agent.load_state_dict(torch.load(model_path, map_location=device))
+        checkpoint = torch.load(model_path, map_location=device)
+        if isinstance(checkpoint, dict) and "agent_state_dict" in checkpoint:
+            agent.load_state_dict(checkpoint["agent_state_dict"])
+        else:
+            agent.load_state_dict(checkpoint)
     else:
         print("No model loaded, using random agent.")
 
@@ -60,6 +69,9 @@ def evaluate(model_path=None, episodes=1):
     print("--- WATCHING THE AGENT (Press 'q' in the window to stop) ---")
     
     try:
+        # [IMPORTANT] Inference Mode
+        # This tells PyTorch: "We are not training, so don't calculate gradients."
+        # This makes the code run much faster and uses less memory.
         with torch.inference_mode():
             while steps < 8000: # Limit length
                 # Thinking
@@ -83,8 +95,13 @@ def evaluate(model_path=None, episodes=1):
                 # Faster tensor conversion
                 obs_tensor = torch.as_tensor(next_obs, device=device).unsqueeze(0).float()
                 
+                if steps % 50 == 0:
+                    vx = info.get('x', 0) - info.get('prev_x', info.get('x', 0))
+                    print(f"Step {steps} | Pos: ({info.get('x', 0)}, {info.get('y', 0)}) | VX: {vx} | Act: {cpu_action} | Rings: {info.get('rings', 0)}")
+
                 if terminated or truncated:
-                    print(f"Episode finished. Reward: {total_reward}")
+                    reason = "WIN/DIE" if terminated else "STUCK/TIME"
+                    print(f"Episode Finished | Reason: {reason} | Final Pos: ({info.get('x', 0)}, {info.get('y', 0)}) | Total Reward: {total_reward:.2f}")
                     obs, _ = env.reset()
                     obs_tensor = torch.as_tensor(obs, device=device).unsqueeze(0).float()
                     total_reward = 0

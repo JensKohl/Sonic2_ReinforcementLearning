@@ -11,12 +11,20 @@ from src.agent import Agent
 from src.utils import make_env
 
 class DummyEnvs:
+    """
+    A simple wrapper to trick the Agent into thinking it's running in a 'Vector Environment'.
+    The Agent expects to handle multiple games at once (Batch Size > 1), but here we only have 1 game.
+    """
     def __init__(self, env):
         self.single_observation_space = env.observation_space
         self.single_action_space = env.action_space
         self.is_vector_env = False
 
 def record_victory(model_path, output_path, threshold=10000, playback_fps=60.0):
+    """
+    Records a video of the agent playing the game until it wins (reaches the threshold X coordinate).
+    It will try up to 10 times to get a good run.
+    """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Loading {model_path} to record victory (Threshold={threshold}, FPS={playback_fps})...")
     
@@ -34,6 +42,10 @@ def record_victory(model_path, output_path, threshold=10000, playback_fps=60.0):
         agent.load_state_dict(checkpoint["agent_state_dict"])
     else:
         agent.load_state_dict(checkpoint)
+        
+    # [IMPORTANT] Switch to Evaluation Mode
+    # This tells PyTorch to disable things like Dropout and BatchNorm, 
+    # ensuring the AI behaves deterministically (same input = same output).
     agent.eval()
     
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')

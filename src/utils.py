@@ -19,7 +19,7 @@ from src.env_wrappers import (
     RetroCompatibility, 
     TransposeObservation, 
     InfoRenderWrapper, 
-    SonicRewardV16,
+    SonicRewardV17,
     TimeLimitWrapper,
     StagnationWrapper,
     FrameSkip
@@ -59,9 +59,6 @@ def make_env(game, state, stack_frames=4, render=False):
         # This strips 'seed' and 'options' before they hit the raw retro env.
         env = RetroCompatibility(env)
 
-        # 2. Statistics (Track returns and lengths for logging)
-        env = gym.wrappers.RecordEpisodeStatistics(env)
-
         # 2. Frame Skipping (CRITICAL for Momentum):
         # We repeat each action for 3 frames (Default was 4).
         # Reducing to 3 gives finer control without overloading the CPU.
@@ -71,8 +68,8 @@ def make_env(game, state, stack_frames=4, render=False):
         env = SonicDiscretizer(env)
         
         # 4. Reward Shaping: Define what the agent should care about (Speed & Progress)
-        # V15 adds hazard awareness (ring loss penalties) and stiffer death penalties.
-        env = SonicRewardV16(env)
+        # V17 uses RAM signals and Spike Fear (-1000 rings)
+        env = SonicRewardV17(env)
         
         # 5. Visualization: (Optional) Pass frames back to main process for rendering
         if render:
@@ -82,14 +79,18 @@ def make_env(game, state, stack_frames=4, render=False):
         env = ResizeObservation(env, 84)
         env = TransposeObservation(env)
         
-        # 6. Time Limit: Force restart after 3 minutes (2700 "AI steps" at 4-frame skip)
-        env = TimeLimitWrapper(env, max_steps=2700)
+        # 6. Time Limit: Force restart after 6 minutes (5400 "AI steps" at 3-frame skip)
+        env = TimeLimitWrapper(env, max_steps=5400)
         
         # 7. Stagnation Check: Restart if Sonic is stuck for 30 seconds (450 "AI steps")
         env = StagnationWrapper(env, max_stagnant_steps=450)
         
         # 8. Frame Stacking: Let the agent see 'time' by stacking 4 consecutive frames
         env = PyTorchFrameStack(env, stack_frames)
+        
+        # 9. Statistics (Capture EVERYTHING below, including Timeouts/Stagnation)
+        # Moving this here ensures that even truncated episodes are logged.
+        env = gym.wrappers.RecordEpisodeStatistics(env)
         
         return env
         

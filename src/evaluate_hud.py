@@ -25,7 +25,7 @@ from src.agent import Agent
 from src.env_wrappers import (
     SonicDiscretizer, ResizeObservation, PyTorchFrameStack, RetroCompatibility,
     TransposeObservation, InfoRenderWrapper, SonicRewardV15, TimeLimitWrapper,
-    StagnationWrapper, FrameSkip
+    StagnationWrapper, FrameSkip, SonicRewardV17
 )
 import retro
 
@@ -47,10 +47,9 @@ def make_env_eval(game, state, stack_frames=4, render=False, max_steps=None, max
         
         env = retro.make(game=game, state=state)
         env = RetroCompatibility(env)
-        env = gym.wrappers.RecordEpisodeStatistics(env)
         env = FrameSkip(env, skip=3)
         env = SonicDiscretizer(env)
-        env = SonicRewardV16(env)
+        env = SonicRewardV17(env)
         
         if render:
             env = InfoRenderWrapper(env)
@@ -58,12 +57,17 @@ def make_env_eval(game, state, stack_frames=4, render=False, max_steps=None, max
         env = ResizeObservation(env, 84)
         env = TransposeObservation(env)
         
-        if max_steps:
-            env = TimeLimitWrapper(env, max_steps=max_steps)
+        if max_steps is None:
+            max_steps = 5400 # 6 minutes
+        env = TimeLimitWrapper(env, max_steps=max_steps)
         if max_stagnant_steps:
             env = StagnationWrapper(env, max_stagnant_steps=max_stagnant_steps)
             
         env = PyTorchFrameStack(env, stack_frames)
+
+        # 9. Statistics (Capture EVERYTHING below, including Timeouts/Stagnation)
+        env = gym.wrappers.RecordEpisodeStatistics(env)
+        
         return env
     return _init
 

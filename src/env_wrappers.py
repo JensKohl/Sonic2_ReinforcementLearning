@@ -208,20 +208,19 @@ class InfoRenderWrapper(gym.Wrapper):
             return obs, info
         return res
 
-class SonicRewardV16(gym.Wrapper):
+class SonicRewardV17(gym.Wrapper):
     """
-    #### Wrapper: SonicRewardV15 (The Hazard-Aware Policy)
-    **Concept**: Reward Engineering / Shaping.
+    #### Wrapper: SonicRewardV17 (Generalist Safety & Victory)
+    **Concept**: Generalization & Hazard Avoidance.
     
-    This is the "Brain" of the project's incentive system. We guide the AI
-    by giving it "treats" (positive reward) for progress and "shocks" (negative reward)
-    for mistakes.
+    This version removes hardcoded level-specific triggers in favor of
+    universal game signals and stricter safety penalties.
     
-    **V16 Features**:
-    1. **Restored Vertical Mastery**: 2.0 altitude reward and 0.5 speed threshold (from V14).
-    2. **Hazard Awareness**: Calibrated penalties for ring loss (-400) and death (-2500).
-    3. **No Time Tax**: Removed the small step penalty to avoid rushed, reckless maneuvers.
-    4. **Loop Navigation**: Incentivizes high-speed movement and spin-dashing.
+    **V17 Features**:
+    1. **RAM-Based Victory**: Trigger win bonus via level_end_bonus (universal).
+    2. **Spike Fear**: Ring loss penalty increased to -1000 (scaled to -10.0).
+    3. **Conservative Curiosity**: Discovery bonus doubled (0.02) to nudge final stretch.
+    4. **Impatience Logic**: Stagnation recovery threshold reduced to 15 steps.
     """
     def __init__(self, env):
         super().__init__(env)
@@ -263,7 +262,7 @@ class SonicRewardV16(gym.Wrapper):
         tile = (curr_x // 16, curr_y // 16)
         if tile not in self.visited_tiles:
             self.visited_tiles.add(tile)
-            discovery_bonus = 0.01 
+            discovery_bonus = 0.02 # Doubled for V17
             
         # 2. SPIN DASH (Intent)
         # Charging a spin dash (DOWN+B) when stuck/stopped.
@@ -315,29 +314,29 @@ class SonicRewardV16(gym.Wrapper):
              self.min_y = curr_y
 
         # 6. STAGNATION RECOVERY
-        # If the AI is pushing against a wall (RIGHT) for 30 steps without moving,
-        # reward Dash/Jump actions to help it find a way over.
+        # If the AI is pushed against a wall for 15 steps (V17 tighter threshold),
+        # reward Dash/Jump actions to force environmental exploration.
         recovery_bonus = 0.0
-        if self.stagnant_steps > 30 and action in [1, 3, 5] and velocity_x < 0.1:
+        if self.stagnant_steps > 15 and action in [1, 3, 5] and velocity_x < 0.1:
             if action in [8, 7, 9]:
                 recovery_bonus = 0.2
 
-        # 7. HAZARDS & PENALTIES (V16 Calibrated Safety)
-        # We increase the stakes for death and add an "ouch" signal for ring loss.
-        # -400.0 is significant enough to avoid spikes but shouldn't cause loop-hesitation.
+        # 7. HAZARDS & PENALTIES (V17 Spike Fear)
+        # We increase the ring penalty to ensure Sonic clearing hazards entirely.
         life_penalty = -2500.0 if curr_lives < self.prev_lives else 0.0
         ring_penalty = 0.0
         if curr_rings < self.prev_rings and curr_lives == self.prev_lives:
-            ring_penalty = -400.0
+            ring_penalty = -1000.0 # Increased to -1000 for V17
             
         self.prev_lives = curr_lives
         self.prev_rings = curr_rings
         
-        # 8. VICTORY
-        # Reaching X=10000 is effectively beating the level.
-        win_bonus = 500.0 if curr_x > 10000 else 0.0
+        # 8. VICTORY (Universal Signpost Bonus)
+        # Reaching the actual signpost in any level.
+        win_bonus = 500.0 if info.get('level_end_bonus', 0) > 0 else 0.0
         if win_bonus > 0:
             terminated = True
+            print(f"--- LEVEL CLEAR DETECTED (Bonus: {info.get('level_end_bonus')}) ---")
 
         self.prev_x = curr_x
         self.prev_y = curr_y

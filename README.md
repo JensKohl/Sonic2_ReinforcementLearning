@@ -29,7 +29,7 @@ To provide a clear, educational, and modular implementation of PPO from scratch 
 ### Usage
 - **Train**:
   ```bash
-  uv run python src/train.py
+  uv run python -m src.train
   ```
   This will start training using the GPU. Logs are saved to `logs/` and models to `models/`.
 

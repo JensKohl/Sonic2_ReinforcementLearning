@@ -116,3 +116,13 @@ After ~10 million steps, the agent consistently clears Emerald Hill Zone Act 1, 
 
 > [!TIP]
 > This project was built for learning! Feel free to tweak the **Entropy Coefficient** in `train.py` or the **Momentum Reward** in `env_wrappers.py` to see how it changes Sonic's behavior.
+
+---
+
+## ⚖️ Disclaimer
+
+This project is for **purely educational and research purposes**. 
+
+- **No ROMs Included**: This repository does not contain any copyrighted game binaries (ROMs). Users must provide their own legally obtained copy of *Sonic the Hedgehog 2* to run the experiments.
+- **Fair Use**: The use of game footage and assets in this project is intended as a professional demonstration of Reinforcement Learning research.
+- **Ownership**: *Sonic the Hedgehog* and all associated characters, graphics, and music are trademarks of **SEGA**. This project is NOT affiliated with or endorsed by SEGA.

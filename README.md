@@ -91,9 +91,7 @@ graph LR
 > [!NOTE]
 > Below is a high-speed completion of Emerald Hill Zone Act 1 by our V18 agent.
 
-<div align="center">
-  <video src="videos/sonic_v18_victory.mp4" width="100%" controls autoplay loop muted></video>
-</div>
+![Sonic V18 Level Completion](videos/sonic_v18_victory.mp4)
 
 ---
 

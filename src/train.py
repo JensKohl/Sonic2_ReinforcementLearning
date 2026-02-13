@@ -308,6 +308,10 @@ def train():
                             writer.add_scalar("charts/episodic_return", ep_reward, global_step)
                             writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
                             
+                            # Log actual victory (signpost reached)
+                            is_victory = 1.0 if info.get("level_end_bonus", 0) > 0 else 0.0
+                            writer.add_scalar("charts/victory", is_victory, global_step)
+                            
                             # Save the best model automatically based on high-score
                             if best_model_callback.update_best(agent, ep_reward):
                                 tqdm.write(f"--> [NEW BEST] Step: {global_step} | Reward: {ep_reward:.2f}")

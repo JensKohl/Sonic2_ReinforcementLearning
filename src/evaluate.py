@@ -99,12 +99,24 @@ def evaluate(model_path=None, episodes=1):
                     vx = info.get('x', 0) - info.get('prev_x', info.get('x', 0))
                     print(f"Step {steps} | Pos: ({info.get('x', 0)}, {info.get('y', 0)}) | VX: {vx} | Act: {cpu_action} | Rings: {info.get('rings', 0)}")
 
-                if terminated or truncated:
-                    reason = "WIN/DIE" if terminated else "STUCK/TIME"
-                    print(f"Episode Finished | Reason: {reason} | Final Pos: ({info.get('x', 0)}, {info.get('y', 0)}) | Total Reward: {total_reward:.2f}")
+                if info.get('level_end_bonus', 0) > 0:
+                    print(f"--- SIGNPOST HIT! (X={info.get('x', 0)}) ---")
+                    print(f"Episode Victory! Reward: {total_reward:.2f}")
+                    print("Freezing for 3 seconds...")
+                    cv2.waitKey(3000)
                     obs, _ = env.reset()
                     obs_tensor = torch.as_tensor(obs, device=device).unsqueeze(0).float()
                     total_reward = 0
+                    steps = 0
+                    continue
+
+                if terminated or truncated:
+                    reason = "DIE" if terminated else "TIMEOUT/STUCK"
+                    print(f"Episode Ended | Reason: {reason} | Final Pos: ({info.get('x', 0)}, {info.get('y', 0)}) | Total Reward: {total_reward:.2f}")
+                    obs, _ = env.reset()
+                    obs_tensor = torch.as_tensor(obs, device=device).unsqueeze(0).float()
+                    total_reward = 0
+                    steps = 0
     finally:
         env.close()
         cv2.destroyAllWindows()

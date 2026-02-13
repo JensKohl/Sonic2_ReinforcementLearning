@@ -279,10 +279,16 @@ class SonicRewardV17(gym.Wrapper):
         in_ramp_zone = (2600 < curr_x < 2800) or (4000 < curr_x < 4400)
         if in_ramp_zone and velocity_x < -1:
             self.backtrack_credit = min(20.0, self.backtrack_credit + 0.5)
+        elif velocity_x > 0:
+            # Spend credit as we move forward
+            self.backtrack_credit = max(0.0, self.backtrack_credit - 0.1)
             
         # 4. MOMENTUM (Speed)
         # Quadratic reward for speed. Faster = exponentially more reward.
-        speed = max(0, velocity_x)
+        # PATCH (V18-Ready): Only reward speed when near the 'frontier' (max_x).
+        # This prevents "momentum farming" in safe areas.
+        on_frontier = curr_x > (self.max_x - 300)
+        speed = max(0, velocity_x) if on_frontier else 0
         speed_factor = 1.0 + (self.backtrack_credit * 0.1)
         momentum_reward = (speed ** 2) * 0.02 * speed_factor
         
@@ -291,10 +297,11 @@ class SonicRewardV17(gym.Wrapper):
         progress_mult = 2.0 if curr_x > 2400 else 1.0 # High stakes after the first loop
         progress_reward = 0.0
         if curr_x > self.max_x:
-            progress_reward = (curr_x - self.max_x) * (1.0 + self.backtrack_credit * 0.2) * progress_mult
+            # Stronger incentive to break personal records
+            progress_reward = (curr_x - self.max_x) * (1.0 + self.backtrack_credit * 0.5) * progress_mult
             self.max_x = curr_x
-            # As max_x increases, we "consume" the backtrack credit.
-            self.backtrack_credit = max(0, self.backtrack_credit - 1.0)
+            # As max_x increases, we "consume" the backtrack credit faster.
+            self.backtrack_credit = max(0, self.backtrack_credit - 2.0)
             self.stagnant_steps = 0
         else:
             self.stagnant_steps += 1

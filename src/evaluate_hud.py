@@ -24,7 +24,7 @@ from src.agent import Agent
 # We define a local version of make_env to allow custom limits without modifying src/utils.py
 from src.env_wrappers import (
     SonicDiscretizer, ResizeObservation, PyTorchFrameStack, RetroCompatibility,
-    TransposeObservation, InfoRenderWrapper, SonicRewardV15, TimeLimitWrapper,
+    TransposeObservation, InfoRenderWrapper, TimeLimitWrapper,
     StagnationWrapper, FrameSkip, SonicRewardV17
 )
 import retro
@@ -57,9 +57,11 @@ def make_env_eval(game, state, stack_frames=4, render=False, max_steps=None, max
         env = ResizeObservation(env, 84)
         env = TransposeObservation(env)
         
-        if max_steps is None:
-            max_steps = 5400 # 6 minutes
-        env = TimeLimitWrapper(env, max_steps=max_steps)
+        # Use a local variable to avoid shadowing the outer 'max_steps' argument
+        limit_steps = max_steps
+        if limit_steps is None:
+            limit_steps = 5400 # 6 minutes
+        env = TimeLimitWrapper(env, max_steps=limit_steps)
         if max_stagnant_steps:
             env = StagnationWrapper(env, max_stagnant_steps=max_stagnant_steps)
             
@@ -162,8 +164,9 @@ def evaluate_with_hud(args):
     
     # Create Environment
     # render=True allows us to get the raw frame if needed, but we use get_screen() usually
-    max_steps = None if args.infinite else 4500 # Slightly longer for eval default (5 mins)
-    max_stagnant = None if args.infinite else 450
+    # Relax stagnation check for evaluation (boss fights can take time stationary)
+    max_steps = None if args.infinite else 5400 # 6 minutes
+    max_stagnant = None if args.infinite else 3600 # 3 minutes (Was 450 / 22s)
     
     env = make_env_eval(gym_id, state, render=False, max_steps=max_steps, max_stagnant_steps=max_stagnant)() 
     
@@ -202,6 +205,8 @@ def evaluate_with_hud(args):
     
     episode_count = 1
     total_reward = 0.0
+    step_counter = 0
+    victory_cooldown = 0
     
     try:
         with torch.no_grad():
@@ -221,9 +226,19 @@ def evaluate_with_hud(args):
                     value_scalar = value.item()
                 
                 # 2. Step Environment
-                next_obs, reward, terminated, truncated, _ = env.step(action_scalar)
+                next_obs, reward, terminated, truncated, info = env.step(action_scalar)
                 total_reward += reward
-                
+
+                # Get curr_x from info immediately so we can check victory condition
+                curr_x = info.get('x', 0)
+                curr_y = info.get('y', 0)
+
+                # Log position periodically to see where it gets stuck
+                step_counter += 1
+                if step_counter % 60 == 0:
+                    bonus = info.get('level_end_bonus', -1)
+                    print(f"Step {step_counter} | X: {curr_x} | Y: {curr_y} | Rings: {info.get('rings', -1)} | Bonus: {bonus}")
+
                 # 3. Visualization
                 # Get the raw screen from the emulator for the human to see (320x224)
                 # The 'env' is wrapped, so we need to dig for the original retro env or use render()
@@ -248,13 +263,35 @@ def evaluate_with_hud(args):
                     break
                 
                 # 4. Prepare next step
-                if terminated or truncated:
-                    reason = "Terminated (Win/Die)" if terminated else "Truncated (Stuck/Time)"
-                    print(f"Episode {episode_count} Done. Reward: {total_reward:.2f} [{reason}]")
+                # Check for Signpost Victory (RAM signal)
+                if info.get('level_end_bonus', 0) > 0:
+                    print(f"--- SIGNPOST HIT! (X={curr_x}) ---")
+                    # Overlay "LEVEL CLEAR" immediately
+                    h, w, _ = display_frame.shape
+                    cv2.putText(display_frame, "LEVEL CLEAR!", (w//2 - 140, h//2), 
+                                cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 3)
+                    cv2.imshow("Sonic 2 Agent View", display_frame)
+                    
+                    print(f"Episode {episode_count} Victory! Reward: {total_reward:.2f}")
+                    print("Freezing for 3 seconds...")
+                    cv2.waitKey(3000)
+                    
+                    # Clean Reset for next episode
                     obs, _ = env.reset()
                     obs_tensor = torch.tensor(obs, device=device).unsqueeze(0).float()
                     total_reward = 0.0
                     episode_count += 1
+                    step_counter = 0
+                    continue
+
+                # Handle other terminations (Death / Time)
+                if terminated or truncated:
+                    print(f"Episode {episode_count} End (Terminated/Truncated). Reward: {total_reward:.2f}")
+                    obs, _ = env.reset()
+                    obs_tensor = torch.tensor(obs, device=device).unsqueeze(0).float()
+                    total_reward = 0.0
+                    episode_count += 1
+                    step_counter = 0
                 else:
                     obs_tensor = torch.tensor(next_obs, device=device).unsqueeze(0).float()
                     

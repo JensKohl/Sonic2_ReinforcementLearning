@@ -23,7 +23,7 @@ class DummyEnvs:
 def record_victory(model_path, output_path, threshold=10000, playback_fps=60.0):
     """
     Records a video of the agent playing the game until it wins (reaches the threshold X coordinate).
-    It will try up to 10 times to get a good run.
+    It will try up to 100 times to get a good run.
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Loading {model_path} to record victory (Threshold={threshold}, FPS={playback_fps})...")
@@ -50,7 +50,7 @@ def record_victory(model_path, output_path, threshold=10000, playback_fps=60.0):
     
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     
-    for ep in range(10): # 10 attempts to get a win
+    for ep in range(100): # 100 attempts to get a win
         obs, info = env.reset()
         frames = []
         max_x = 0

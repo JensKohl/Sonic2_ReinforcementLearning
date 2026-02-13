@@ -1,50 +1,74 @@
-# Sonic 2 PPO Reinforcement Learning Agent
+# 🦔 Sonic 2 PPO: From-Scratch Reinforcement Learning
+> **A educational demonstrator of the PPO algorithm solving Emerald Hill Zone Act 1.**
 
-This project demonstrates how to build a Reinforcement Learning (RL) agent to play *Sonic the Hedgehog 2* using Proximal Policy Optimization (PPO).
+This repository contains a modular, from-scratch implementation of **Proximal Policy Optimization (PPO)** in PyTorch. It is designed as a teaching tool for students and RL enthusiasts to see how a CNN-based agent learns to master the complex physics and fast-paced environment of *Sonic the Hedgehog 2*.
 
-## 🎯 Goal
-To provide a clear, educational, and modular implementation of PPO from scratch using PyTorch, explaining key concepts like:
-- **PPO (Proximal Policy Optimization)**: The core learning algorithm.
-- **CNN (Convolutional Neural Networks)**: For processing game frames.
-- **Frame Stacking**: To give the agent a sense of motion.
-- **Parallel Environments**: To speed up training.
+---
+
+## ✨ Key Features
+
+*   **🎓 Educational Focused**: Every file is heavily commented for beginners, explaining the *why* behind PPO losses, CNN kernel sizes, and Actor-Critic architectures.
+*   **🏎️ Momentum Reward (V18)**: A sophisticated reward function that handles the "Run-up" logic needed for half-pipes and loops, while featuring an **Anti-Farming** fix to prevent exploitation.
+*   **📺 Real-time HUD**: A specialized evaluation tool (`evaluate_hud.py`) that overlays the agent's real-time rewards, probability distribution (entropy), and action choices.
+*   **💨 optimized Workflow**: Built with `uv` for lightning-fast dependency management and a specialized Git history that keeps the repo small (~0.2 MB) despite its history.
+*   **🛡️ Safety First**: Built-in GPU temperature monitoring to protect hardware during long training sessions.
+
+---
 
 ## 🚀 Getting Started
 
-### Prerequisites
-- Python 3.10+
-- `uv` package manager
-- **Sonic 2 ROM**: You must provide `Sonic the Hedgehog 2 (JUE) [!].bin` in the `ROMS/` directory.
+### 📋 Prerequisites
+- **Python 3.10+** (Recommended: 3.11)
+- **uv package manager**: `pip install uv`
+- **Sega Genesis ROM**: You need the Sonic 2 ROM (`Sonic the Hedgehog 2 (JUE) [!].bin`).
 
-### Installation
-1. Initialize the environment:
-   ```bash
-   uv sync
-   ```
-2. Import the game into stable-retro:
-   ```bash
-   python -m retro.import ROMS
-   ```
+### 📦 Installation
+1.  **Clone & Sync**:
+    ```bash
+    uv sync
+    ```
+2.  **Import ROM**: Place your ROM in the `/ROMS` folder and run:
+    ```bash
+    python -m retro.import ROMS
+    ```
 
-### Usage
-- **Train**:
-  ```bash
-  uv run python -m src.train
-  ```
-  This will start training using the GPU. Logs are saved to `logs/` and models to `models/`.
+---
 
-- **Evaluate**:
-  ```bash
-  uv run python -m src.evaluate --model models/your_model_name.pth
-  ```
-  This will open a window and show the agent playing. Use `--model` to specify a checkpoint. Without it, a random agent plays.
+## 🎮 How to Use
 
+### 1. Training the Agent
+To start the training process (uses 8 parallel environments by default):
+```bash
+uv run python src/train.py
+```
+*   **Checkpoints**: Saved to `models/checkpoints/`
+*   **Logs**: View progress in real-time via Tensorboard: `tensorboard --logdir logs`
 
-## 📂 Project Structure
-- `src/`: Source code for the agent and training.
-- `docs/`: Educational documentation on RL concepts.
-- `models/`: Checkpoints of trained models.
-- `logs/`: Tensorboard logs.
+### 2. High-Quality Evaluation (HUD)
+Watch the AI play with full diagnostic information overlaid on screen:
+```bash
+uv run python -m src.evaluate_hud --model models/best_model.pth
+```
 
-## 📚 Documentation
-Check out [docs/reinforcement_learning.md](docs/reinforcement_learning.md) to learn about the theory behind the code!
+### 3. Victory Analysis
+Quickly calculate victory rates and completion stats from your training logs:
+```bash
+uv run python -m src.count_victories --log-dir logs/Your_Run_Folder
+```
+
+---
+
+## 📂 Project Navigation
+
+*   **[src/ppo.py](src/ppo.py)**: The mathematical heart. Contains the RolloutBuffer and PPO Update logic.
+*   **[src/env_wrappers.py](src/env_wrappers.py)**: The physics teacher. Defines the **V18 Reward** and game discretizers.
+*   **[src/agent.py](src/agent.py)**: The brain. Connects the NatureCNN backbone to the Actor and Critic heads.
+*   **[CODE_WALKTHROUGH.md](CODE_WALKTHROUGH.md)**: A deep dive into how the files connect for students.
+
+---
+
+## 🏁 Results
+After ~10 million steps, the agent consistently clears Emerald Hill Zone Act 1, handling the loops, the "s-curves," and the final signpost with speed and precision.
+
+> [!TIP]
+> This project was built for learning! Feel free to tweak the **Entropy Coefficient** in `train.py` or the **Momentum Reward** in `env_wrappers.py` to see how it changes Sonic's behavior.

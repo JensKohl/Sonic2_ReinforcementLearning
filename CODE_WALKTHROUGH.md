@@ -36,11 +36,11 @@ This contains the mathematical core of the project:
 
 ### 4. `src/env_wrappers.py` (The Training Wheels)
 Raw Genesis games are hard for AI. We use "Wrappers" to make it easier:
-- **`SonicRewardV13`**: Our custom "Score" function. Instead of just game score, we reward Sonic for moving right, building momentum, and spin-dashing!
+- **`SonicRewardV18`**: Our custom "Score" function. Instead of just game score, we reward Sonic for moving right, building momentum, and spin-dashing! It includes local "Backtrack Credit" for loops and is hardened against "Momentum Farming."
 - **`SonicDiscretizer`**: Simplifies the 12-button controller into 10 logical choices (Jump Right, Spin Dash, etc.).
 - **`PyTorchFrameStack`**: Let's Sonic "see" 4 frames at once so he can perceive motion and speed.
 
 ## 🚀 Key Concepts to Study
 1.  **Advantage Calculation**: Look at `compute_returns_and_advantages` in `ppo.py`. This is how the AI calculates if a move was "better than expected."
-2.  **Reward Shaping**: Check `SonicRewardV13` in `env_wrappers.py`. Notice how we suppressed the altitude reward when jumping to prevent the AI from "cheating" by jumping instead of running up hills.
+2.  **Reward Shaping**: Check `SonicRewardV18` in `env_wrappers.py`. Notice how we only reward high-speed momentum when the agent is near its personal 'frontier' (max progress) to prevent exploitation.
 3.  **Orthogonal Initialization**: See `layer_init` in `agent.py`. This is a professional trick to make the AI start learning with a "balanced" mind.

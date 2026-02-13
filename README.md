@@ -72,13 +72,14 @@ graph LR
     score["💰 State Value (Expected Reward)"]
 
     input --> cnn
+    input --> cnn
     cnn --> actor
     cnn --> critic
     actor --> action
     critic --> score
 
-    style actor fill:#f96,stroke:#333,stroke-width:2px
-    style critic fill:#bbf,stroke:#333,stroke-width:2px
+    style actor fill:#3498db,stroke:#333,stroke-width:2px,color:#fff
+    style critic fill:#e91e63,stroke:#333,stroke-width:2px,color:#fff
     style input fill:#dfd,stroke:#333
 ```
 

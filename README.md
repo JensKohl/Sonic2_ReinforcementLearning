@@ -91,7 +91,7 @@ graph LR
 > [!NOTE]
 > Below is a high-speed completion of Emerald Hill Zone Act 1 by our V18 agent.
 
-https://github.com/JensKohl/Sonic2_ReinforcementLearning/raw/master/videos/sonic_v18_victory.mp4
+![Sonic V18 Level Completion](videos/sonic_v18_victory.gif)
 
 ---
 

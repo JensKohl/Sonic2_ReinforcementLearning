@@ -19,7 +19,7 @@ from src.env_wrappers import (
     RetroCompatibility, 
     TransposeObservation, 
     InfoRenderWrapper, 
-    SonicRewardV17,
+    SonicRewardV18,
     TimeLimitWrapper,
     StagnationWrapper,
     FrameSkip
@@ -68,8 +68,8 @@ def make_env(game, state, stack_frames=4, render=False):
         env = SonicDiscretizer(env)
         
         # 4. Reward Shaping: Define what the agent should care about (Speed & Progress)
-        # V17 uses RAM signals and Spike Fear (-1000 rings)
-        env = SonicRewardV17(env)
+        # V18 uses RAM signals and solves the "Momentum Farming" exploit.
+        env = SonicRewardV18(env)
         
         # 5. Visualization: (Optional) Pass frames back to main process for rendering
         if render:

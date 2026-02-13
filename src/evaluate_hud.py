@@ -263,7 +263,8 @@ def evaluate_with_hud(args):
                     break
                 
                 # 4. Prepare next step
-                # Check for Signpost Victory (RAM signal)
+                # Standardized Victory Detection (Signpost Hit):
+                # Beginners: In Sonic 2, reaching the goal is signaled by a 'bonus' start.
                 if info.get('level_end_bonus', 0) > 0:
                     print(f"--- SIGNPOST HIT! (X={curr_x}) ---")
                     # Overlay "LEVEL CLEAR" immediately

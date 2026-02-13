@@ -208,19 +208,21 @@ class InfoRenderWrapper(gym.Wrapper):
             return obs, info
         return res
 
-class SonicRewardV17(gym.Wrapper):
+class SonicRewardV18(gym.Wrapper):
     """
-    #### Wrapper: SonicRewardV17 (Generalist Safety & Victory)
-    **Concept**: Generalization & Hazard Avoidance.
+    #### Wrapper: SonicRewardV18 (Anti-Farming & Physics Logic)
+    **Concept**: Reward Engineering for Physics-Based Games.
     
-    This version removes hardcoded level-specific triggers in favor of
-    universal game signals and stricter safety penalties.
+    This is the definitive version of the reward function for the tutorial. 
+    It specifically solves the "Momentum Farming" exploit found in earlier versions.
     
-    **V17 Features**:
-    1. **RAM-Based Victory**: Trigger win bonus via level_end_bonus (universal).
-    2. **Spike Fear**: Ring loss penalty increased to -1000 (scaled to -10.0).
-    3. **Conservative Curiosity**: Discovery bonus doubled (0.02) to nudge final stretch.
-    4. **Impatience Logic**: Stagnation recovery threshold reduced to 15 steps.
+    **V18 Logic**:
+    1. **Anti-Momentum Farming**: Sonic only gets speed rewards when he is near his 
+       personal 'frontier' (his max_x record). This prevents him from running 
+       back and forth in a safe area to "mine" reward points.
+    2. **Backtrack Credit**: If Sonic walks backwards in specific ramp zones, he 
+       earns "credit." This mimics the human idea of "needing a run-up" for a jump.
+    3. **Universal Victory**: Uses the `level_end_bonus` RAM signal for a clean win bonus.
     """
     def __init__(self, env):
         super().__init__(env)
@@ -248,7 +250,7 @@ class SonicRewardV17(gym.Wrapper):
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
         
-        # Pull level specific variables from the game RAM
+        # Pull level specific variables from the game RAM data provided by Retro
         curr_x = info.get('x', 0)
         curr_y = info.get('y', 0)
         curr_rings = info.get('rings', 0)
@@ -256,26 +258,26 @@ class SonicRewardV17(gym.Wrapper):
         velocity_x = curr_x - self.prev_x
         
         # 1. DISCOVERY (Exploration)
-        # Give a tiny one-time reward for every 16x16 pixel square visited.
-        # This prevents the AI from just standing still.
+        # We give a tiny reward for exploring new 16x16 patches of the world.
+        # This prevents the AI from getting "paralyzed" by fear in new areas.
         discovery_bonus = 0.0
         tile = (curr_x // 16, curr_y // 16)
         if tile not in self.visited_tiles:
             self.visited_tiles.add(tile)
-            discovery_bonus = 0.02 # Doubled for V17
+            discovery_bonus = 0.02 
             
         # 2. SPIN DASH (Intent)
-        # Charging a spin dash (DOWN+B) when stuck/stopped.
-        # Incentivize charging a spin dash (DOWN + B/A) when stationary.
-        # This is CRITICAL for loops and steep ramps.
+        # Charging a spin dash (DOWN+B) when stationary.
+        # This is CRITICAL for loops. Without this, the AI might never "discover"
+        # that it needs to crouch and jump to build speed.
         spin_dash_reward = 0.0
         if action in [7, 9] and abs(velocity_x) < 1:
             spin_dash_reward = 0.1
             
         # 3. BACKTRACK & MOMENTUM (Physics)
-        # If the AI walks backwards in a ramp zone, we give it "credit".
-        # This allows it to "spend" that credit for EXTRA reward when it runs forward.
-        # This specifically teaches the concept of "Run-up space".
+        # The concept of a "Run-up":
+        # If the AI walks backwards in a ramp zone, we give it "credit."
+        # It can then "spend" that credit for a multiplier when it runs forward.
         in_ramp_zone = (2600 < curr_x < 2800) or (4000 < curr_x < 4400)
         if in_ramp_zone and velocity_x < -1:
             self.backtrack_credit = min(20.0, self.backtrack_credit + 0.5)
@@ -283,20 +285,25 @@ class SonicRewardV17(gym.Wrapper):
             # Spend credit as we move forward
             self.backtrack_credit = max(0.0, self.backtrack_credit - 0.1)
             
-        # 4. MOMENTUM (Speed)
-        # Quadratic reward for speed. Faster = exponentially more reward.
-        # PATCH (V18-Ready): Only reward speed when near the 'frontier' (max_x).
-        # This prevents "momentum farming" in safe areas.
+        # 4. MOMENTUM (High Performance Reward)
+        # We want Sonic to go FAST. We use speed squared (speed^2) so high speed 
+        # is worth MUCH more than low speed.
+        
+        # THE "ANTI-FARMING" FIX (V18):
+        # Only reward speed when near the 'frontier' (within 300 pixels of his best).
+        # Otherwise, the agent might run back and forth in the first level to 
+        # get infinite points without ever trying to finish the level.
         on_frontier = curr_x > (self.max_x - 300)
         speed = max(0, velocity_x) if on_frontier else 0
         speed_factor = 1.0 + (self.backtrack_credit * 0.1)
         momentum_reward = (speed ** 2) * 0.02 * speed_factor
         
-        # 4. HORIZONTAL PROGRESS (Main Goal)
-        # The primary reward comes from increasing the 'max_x' reached.
+        # 5. HORIZONTAL PROGRESS (The Main Goal)
+        # The primary reward comes from increasing the 'max_x' record.
         progress_mult = 2.0 if curr_x > 2400 else 1.0 # High stakes after the first loop
         progress_reward = 0.0
         if curr_x > self.max_x:
+            # We reward the difference: How many new pixels did we reach?
             # Stronger incentive to break personal records
             progress_reward = (curr_x - self.max_x) * (1.0 + self.backtrack_credit * 0.5) * progress_mult
             self.max_x = curr_x

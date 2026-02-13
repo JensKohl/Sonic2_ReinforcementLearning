@@ -1,3 +1,9 @@
+# This script is the "Main Entry Point" for teaching the agent.
+# It uses PPO (Proximal Policy Optimization) to teach Sonic how to play.
+# The process works in two repeating loops:
+# 1. ROLLOUT: The agent plays 8 games in parallel to gather experience.
+# 2. OPTIMIZATION: The agent studies that experience and improves its skills.
+
 import os
 import sys
 import subprocess

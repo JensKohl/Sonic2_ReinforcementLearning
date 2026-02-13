@@ -58,6 +58,48 @@ uv run python -m src.count_victories --log-dir logs/Your_Run_Folder
 
 ---
 
+## 🧠 Technical Deep Dive: The Brain
+
+The agent uses a **Deep Q-Network style CNN** combined with the **PPO algorithm**. Here is how the pixels become actions:
+
+```mermaid
+graph LR
+    input["🎮 Game Frame (84x84x4)"] 
+    cnn["🖼️ NatureCNN (Backbone)"]
+    actor["🎭 Actor Head (Policy)"]
+    critic["⚖️ Critic Head (Value)"]
+    action["🕹️ Action (Jump, Spin Dash, etc.)"]
+    score["💰 State Value (Expected Reward)"]
+
+    input --> cnn
+    cnn --> actor
+    cnn --> critic
+    actor --> action
+    critic --> score
+
+    style actor fill:#f96,stroke:#333,stroke-width:2px
+    style critic fill:#bbf,stroke:#333,stroke-width:2px
+    style input fill:#dfd,stroke:#333
+```
+
+---
+
+## 📽️ Agent Spotlight
+> [!NOTE]
+> Below is a high-speed completion of Emerald Hill Zone Act 1 by our V18 agent.
+
+![Sonic V18 Level Completion](videos/sonic_v18_victory.mp4)
+
+---
+
+## 🔮 Future Work: Multi-Level Mastery
+Our current v18 model is a specialist in Emerald Hill Act 1. The next phase of this project will focus on:
+- **Base Model Generalization**: Training on multiple zones (Chemical Plant, Casino Night) simultaneously.
+- **Curated Curriculum**: Implementing a training schedule that slowly increases level complexity.
+- **Transfer Learning**: Using our v18 weights as a starting point for harder boss fights.
+
+---
+
 ## 📂 Project Navigation
 
 *   **[src/ppo.py](src/ppo.py)**: The mathematical heart. Contains the RolloutBuffer and PPO Update logic.

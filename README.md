@@ -105,7 +105,7 @@ Our current v18 model is a specialist in Emerald Hill Act 1. The next phase of t
 ## 📂 Project Navigation
 
 *   **[src/ppo.py](src/ppo.py)**: The mathematical heart. Contains the RolloutBuffer and PPO Update logic.
-*   **[src/env_wrappers.py](src/env_wrappers.py)**: The physics teacher. Defines the **V18 Reward** and game discretizers.
+*   **[src/env_wrappers.py](src/env_wrappers.py)**: The physics teacher. Defines the **reward** and game discretizers.
 *   **[src/agent.py](src/agent.py)**: The brain. Connects the NatureCNN backbone to the Actor and Critic heads.
 *   **[CODE_WALKTHROUGH.md](CODE_WALKTHROUGH.md)**: A deep dive into how the files connect for students.
 

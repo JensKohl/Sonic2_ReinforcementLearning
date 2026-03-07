@@ -5,6 +5,14 @@ This repository contains a modular, from-scratch implementation of **Proximal Po
 
 ---
 
+## 📽️ Agent Spotlight
+> [!NOTE]
+> Below is a high-speed completion of Emerald Hill Zone Act 1 by our V18 agent.
+
+![Sonic V18 Level Completion](videos/sonic_v18_victory.gif)
+
+---
+
 ## ✨ Key Features
 
 *   **🎓 Educational Focused**: Every file is heavily commented for beginners, explaining the *why* behind PPO losses, CNN kernel sizes, and Actor-Critic architectures.
@@ -84,14 +92,6 @@ graph LR
     style action fill:#555,stroke:#333,stroke-width:1px,color:#fff
     style score fill:#555,stroke:#333,stroke-width:1px,color:#fff
 ```
-
----
-
-## 📽️ Agent Spotlight
-> [!NOTE]
-> Below is a high-speed completion of Emerald Hill Zone Act 1 by our V18 agent.
-
-![Sonic V18 Level Completion](videos/sonic_v18_victory.gif)
 
 ---
 

@@ -98,6 +98,7 @@ graph LR
 ## 🔮 Future Work: Multi-Level Mastery
 Our current v18 model is a specialist in Emerald Hill Act 1. The next phase of this project will focus on:
 - **Base Model Generalization**: Training on multiple zones (Chemical Plant, Casino Night) simultaneously.
+-**Speed up level run**: update reward function to include time as a reward, so that the agent finished the levels faster.
 - **Curated Curriculum**: Implementing a training schedule that slowly increases level complexity.
 - **Extend documentation**: add more comments and visualizations to explain code and algorithms in more detail.
 

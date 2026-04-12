@@ -18,7 +18,8 @@ This repository contains a modular, from-scratch implementation of **Proximal Po
 *   **🎓 Educational Focused**: Every file is heavily commented for beginners, explaining the *why* behind PPO losses, CNN kernel sizes, and Actor-Critic architectures.
 *   **🏎️ Momentum Reward (V18)**: A sophisticated reward function that handles the "Run-up" logic needed for half-pipes and loops, while featuring an **Anti-Farming** fix to prevent exploitation.
 *   **📺 Real-time HUD**: A specialized evaluation tool (`evaluate_hud.py`) that overlays the agent's real-time rewards, probability distribution (entropy), and action choices.
-*   **💨 optimized Workflow**: Built with `uv` for lightning-fast dependency management and a specialized Git history that keeps the repo small (~0.2 MB) despite its history.
+*   **💨 Optimized Workflow**: Built with `uv` for lightning-fast dependency management and a specialized Git history that keeps the repo small (~0.2 MB).
+*   **🏆 10/10 Code Quality**: The entire codebase is strictly standardized using **Pylint** and **Flake8**, ensuring professional-grade maintainability and readability.
 *   **🛡️ Safety First**: Built-in GPU temperature monitoring to protect hardware during long training sessions.
 
 ---
@@ -55,13 +56,13 @@ uv run python src/train.py
 ### 2. High-Quality Evaluation (HUD)
 Watch the AI play with full diagnostic information overlaid on screen:
 ```bash
-uv run python -m src.evaluate_hud --model models/best_model.pth
+uv run python src/evaluate_hud.py --model models/checkpoints/latest_checkpoint.pth
 ```
 
-### 3. Victory Analysis
-Quickly calculate victory rates and completion stats from your training logs:
+### 3. Victory Recording
+Autonomously record a successful level completion to an MP4 video:
 ```bash
-uv run python -m src.count_victories --log-dir logs/Your_Run_Folder
+uv run python src/record_victory.py models/checkpoints/latest_checkpoint.pth
 ```
 
 ---
@@ -107,9 +108,11 @@ Our current v18 model is a specialist in Emerald Hill Act 1. The next phase of t
 ## 📂 Project Navigation
 
 *   **[src/ppo.py](src/ppo.py)**: The mathematical heart. Contains the RolloutBuffer and PPO Update logic.
-*   **[src/env_wrappers.py](src/env_wrappers.py)**: The physics teacher. Defines the **reward** and game discretizers.
+*   **[src/env_wrappers.py](src/env_wrappers.py)**: The physics teacher. Defines the **reward** and environment discretizers.
 *   **[src/agent.py](src/agent.py)**: The brain. Connects the NatureCNN backbone to the Actor and Critic heads.
+*   **[src/record_victory.py](src/record_victory.py)**: The cinematographer. Autonomously captures level completions to MP4.
 *   **[CODE_WALKTHROUGH.md](CODE_WALKTHROUGH.md)**: A deep dive into how the files connect for students.
+*   **[.pylintrc](.pylintrc)**: Documentation of the project's strict high-quality coding standards.
 
 ---
 

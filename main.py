@@ -1,3 +1,7 @@
+"""
+Main entry point script for the Sonic 2 RL framework.
+"""
+
 def main():
     """
     Entry point for the project.

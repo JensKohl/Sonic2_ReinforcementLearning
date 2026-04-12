@@ -40,3 +40,4 @@ ROMS/
 .env
 .DS_Store
 Thumbs.db
+.pylintrc

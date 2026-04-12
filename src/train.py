@@ -57,7 +57,6 @@ class GPUTemperatureCallback(Callback):
         self.threshold = threshold
         self.check_freq = check_freq
         self.writer = writer
-        self.last_check_update = 0
 
     def on_update(self, update, global_step, train_stats):
         if update % self.check_freq == 0:
@@ -149,7 +148,7 @@ class BestModelCallback(Callback):
                     reward = info["episode"]["r"]
                     if reward > self.best_reward:
                         self.best_reward = reward
-                        path = os.path.join(self.save_path, f"{self.run_name}_best.pth")
+                        os.path.join(self.save_path, f"{self.run_name}_best.pth")
                         # Note: We need the agent state here. We'll pass it in train_stats or similar
                         pass 
 
@@ -253,7 +252,7 @@ def train():
     # GPU Temperature Safety Callback (Threshold: 85°C, check every 20 updates)
     temp_callback = GPUTemperatureCallback(threshold=85, check_freq=20, writer=writer)
 
-    start_time = time.time()
+    time.time()
     
     try:
         obs, _ = envs.reset()

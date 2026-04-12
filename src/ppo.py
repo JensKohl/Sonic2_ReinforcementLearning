@@ -97,7 +97,7 @@ class PPOAlgo:
         b_actions = buffer.actions.reshape((-1,) + buffer.actions.shape[2:])
         b_advantages = buffer.advantages.reshape(-1)
         b_returns = buffer.returns.reshape(-1)
-        b_values = buffer.values.reshape(-1)
+        buffer.values.reshape(-1)
 
         # Advantage Normalization: Stabilizes training
         b_advantages = (b_advantages - b_advantages.mean()) / (b_advantages.std() + 1e-8)
@@ -105,7 +105,7 @@ class PPOAlgo:
         inds = np.arange(len(b_obs))
         loss_info = {"pg_loss": [], "v_loss": [], "entropy": [], "approx_kl": []}
         
-        for epoch in range(epochs):
+        for _ in range(epochs):
             np.random.shuffle(inds)
             for start in range(0, len(inds), minibatch_size):
                 end = start + minibatch_size

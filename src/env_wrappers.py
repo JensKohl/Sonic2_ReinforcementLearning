@@ -353,7 +353,6 @@ class SonicRewardV18(gym.Wrapper):
             print(f"--- LEVEL CLEAR DETECTED (Bonus: {info.get('level_end_bonus')}) ---")
 
         self.prev_x = curr_x
-        self.prev_y = curr_y
 
         # Combine everything and scale down to stable range (usually +/- 1.0 per step)
         total_custom = progress_reward + spin_dash_reward + momentum_reward + \

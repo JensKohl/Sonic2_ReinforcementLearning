@@ -1,4 +1,3 @@
-import os
 import sys
 import gymnasium as gym
 
@@ -17,14 +16,13 @@ sys.modules["gym.utils.seeding"] = seeding
 # ------------------------------------------
 
 import torch
-import time
 import argparse
 import cv2
 
 from src.utils import make_env
 from src.agent import Agent
 
-def evaluate(model_path=None, episodes=1):
+def evaluate(model_path=None):
     """
     Runs the agent in 'Inference Mode' (Play Mode).
     Unlike training, this doesn't update any weights. It just runs the game 

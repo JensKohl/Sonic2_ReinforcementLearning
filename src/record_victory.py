@@ -3,9 +3,6 @@ import gymnasium
 sys.modules["gym"] = gymnasium
 
 import torch
-import numpy as np
-import os
-import retro
 import cv2
 from src.agent import Agent
 from src.utils import make_env
@@ -18,7 +15,6 @@ class DummyEnvs:
     def __init__(self, env):
         self.single_observation_space = env.observation_space
         self.single_action_space = env.action_space
-        self.is_vector_env = False
 
 def record_victory(model_path, output_path, threshold=10000, playback_fps=60.0):
     """

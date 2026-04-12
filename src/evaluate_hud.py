@@ -104,7 +104,6 @@ def draw_info_panel(frame, action_index, reward_sum, value_est=None, episode_num
     # Font settings
     font = cv2.FONT_HERSHEY_SIMPLEX
     font_scale = 0.4
-    font_thickness = 1
     
     # Colors
     col_active = (0, 255, 0)     # Bright Green
@@ -153,14 +152,13 @@ def evaluate_with_hud(args):
     Main loop for running the agent with visualization.
     """
     model_path = args.model
-    stochastic_mode = args.stochastic
 
     gym_id = "SonicTheHedgehog2-Genesis"
     state = "EmeraldHillZone.Act1"
     
-    print(f"--- SONIC 2 HUD EVALUATION ---")
+    print("--- SONIC 2 HUD EVALUATION ---")
     print(f"Model: {model_path}")
-    print(f"Press 'Q' or 'ESC' to quit.")
+    print("Press 'Q' or 'ESC' to quit.")
     
     # Create Environment
     # render=True allows us to get the raw frame if needed, but we use get_screen() usually
@@ -206,7 +204,6 @@ def evaluate_with_hud(args):
     episode_count = 1
     total_reward = 0.0
     step_counter = 0
-    victory_cooldown = 0
     
     try:
         with torch.no_grad():

@@ -10,8 +10,8 @@ def main():
     print("  python src/train.py")
     print("\nTo watch a trained agent play:")
     print("  python src/evaluate.py --model models/checkpoints/latest_checkpoint.pth")
-    print("\nTo verify your setup:")
-    print("  python tools/check_env.py")
+    print("\nTo record a victory video:")
+    print("  python src/record_victory.py models/checkpoints/latest_checkpoint.pth")
     print("="*60)
 
 if __name__ == "__main__":

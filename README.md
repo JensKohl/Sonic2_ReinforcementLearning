@@ -9,7 +9,7 @@ This repository contains a modular, from-scratch implementation of **Proximal Po
 > [!NOTE]
 > Below is a high-speed completion of Emerald Hill Zone Act 1 by our V18 agent.
 
-![Sonic V18 Level Completion](videos/sonic_v18_victory.gif)
+<img src="videos/sonic_v18_victory.gif" width="100%" alt="Sonic V18 Level Completion">
 
 ---
 

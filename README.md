@@ -31,7 +31,7 @@ This repository contains a modular, from-scratch implementation of **Proximal Po
 ### 📋 Prerequisites
 - **Python 3.10+** (Recommended: 3.11)
 - **uv package manager**: `pip install uv`
-- **Sega Genesis ROM**: You need the Sonic 2 ROM (`Sonic the Hedgehog 2 (JUE) [!].bin`).
+- **Sega Genesis ROM**: You need the Sonic 2 ROM.
 
 ### 📦 Installation
 1.  **Clone & Sync**:
